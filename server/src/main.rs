@@ -5,6 +5,7 @@ use engine::{
     resources::TokioRuntimeResource,
 };
 use std::time::Duration;
+use time::OffsetDateTime;
 use tokio::sync::mpsc::channel;
 
 enum ServerMessage {
@@ -75,17 +76,21 @@ fn ping_server_system(
     tokio_runtime_resource: Res<TokioRuntimeResource<ServerMessage>>,
 ) {
     if let Some(server) = &connection_resource.server {
-        let tx = tokio_runtime_resource.sender.clone();
+        let now = OffsetDateTime::now_utc();
 
-        let id = server.id.clone();
+        if now - server.last_ping >= Duration::from_secs(10) {
+            let tx = tokio_runtime_resource.sender.clone();
 
-        tokio_runtime_resource.runtime.spawn(async move {
-            let result = ping_server(&id).await;
+            let id = server.id.clone();
 
-            match result {
-                Ok(server) => tx.send(ServerMessage::PingServer(server)).await.unwrap(),
-                Err(error) => error!(error = ?error, "Ping"),
-            }
-        });
+            tokio_runtime_resource.runtime.spawn(async move {
+                let result = ping_server(&id).await;
+
+                match result {
+                    Ok(server) => tx.send(ServerMessage::PingServer(server)).await.unwrap(),
+                    Err(error) => error!(error = ?error, "Ping"),
+                }
+            });
+        }
     }
 }

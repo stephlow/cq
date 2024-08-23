@@ -6,5 +6,6 @@ edition = "2021"
 [dependencies]
 bevy = { workspace = true }
 engine = { path = "../engine" }
+time = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
