@@ -1,12 +1,23 @@
 use axum::{response::IntoResponse, routing::get, Router};
 use bevy::{app::ScheduleRunnerPlugin, log::tracing_subscriber, prelude::*};
+use bevy_quinnet::{
+    server::{
+        certificate::CertificateRetrievalMode, QuinnetServer, QuinnetServerPlugin,
+        ServerEndpointConfiguration,
+    },
+    shared::channels::ChannelsConfiguration,
+};
 use clap::{arg, Parser};
 use engine::{
     api_client::{ping_server, register_server},
     models::api::{GameServer, RegisterGameServer},
+    network::ClientMessage,
     resources::TokioRuntimeResource,
 };
-use std::time::Duration;
+use std::{
+    net::{IpAddr, Ipv4Addr},
+    time::Duration,
+};
 use time::OffsetDateTime;
 use tokio::sync::mpsc::channel;
 
@@ -29,7 +40,7 @@ struct ServerArgs {
     web_port: u16,
 }
 
-enum ServerMessage {
+enum TokioServerMessage {
     RegisterServer(GameServer),
     PingServer(GameServer),
 }
@@ -45,7 +56,7 @@ fn main() {
         .init();
 
     let args = ServerArgs::parse();
-    let (tx, rx) = channel::<ServerMessage>(10);
+    let (tx, rx) = channel::<TokioServerMessage>(10);
 
     App::new()
         .add_plugins(
@@ -54,6 +65,9 @@ fn main() {
             ))),
         )
         .insert_resource(args)
+        .add_plugins(QuinnetServerPlugin::default())
+        .add_systems(Startup, start_listening)
+        .add_systems(Update, handle_client_messages)
         .insert_resource(ConnectionResource::default())
         .insert_resource(TokioRuntimeResource::new(tx, rx))
         .add_systems(Update, tokio_receiver_system)
@@ -63,21 +77,72 @@ fn main() {
         .run();
 }
 
+fn start_listening(mut server: ResMut<QuinnetServer>) {
+    server
+        .start_endpoint(
+            ServerEndpointConfiguration::from_ip(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 6000),
+            CertificateRetrievalMode::GenerateSelfSigned {
+                server_hostname: "127.0.0.1".to_string(),
+            },
+            ChannelsConfiguration::default(),
+        )
+        .unwrap();
+}
+
+fn handle_client_messages(
+    mut server: ResMut<QuinnetServer>,
+    /*...*/
+) {
+    let mut endpoint = server.endpoint_mut();
+    for client_id in endpoint.clients() {
+        while let Some((client_id, message)) =
+            endpoint.try_receive_message_from::<ClientMessage>(client_id)
+        {
+            println!("ClientMessage: {:?}", message);
+            match message {
+                // Match on your own message types ...
+                ClientMessage::Join { username } => {
+                    // Send a messsage to 1 client
+                    // endpoint
+                    //     .send_message(client_id, ServerMessage::InitClient {/*...*/})
+                    //     .unwrap();
+                    /*...*/
+                }
+                ClientMessage::Disconnect {} => {
+                    // Disconnect a client
+                    endpoint.disconnect_client(client_id.into());
+                    /*...*/
+                }
+                ClientMessage::ChatMessage { message } => {
+                    // Send a message to a group of clients
+                    // endpoint
+                    //     .send_group_message(
+                    //         client_group, // Iterator of ClientId
+                    //         ServerMessage::ChatMessage {/*...*/},
+                    //     )
+                    //     .unwrap();
+                    /*...*/
+                }
+            }
+        }
+    }
+}
+
 fn tokio_receiver_system(
     mut connection_resource: ResMut<ConnectionResource>,
-    mut tokio_runtime_resource: ResMut<TokioRuntimeResource<ServerMessage>>,
+    mut tokio_runtime_resource: ResMut<TokioRuntimeResource<TokioServerMessage>>,
 ) {
     if let Ok(message) = tokio_runtime_resource.receiver.try_recv() {
         match message {
-            ServerMessage::RegisterServer(server) => connection_resource.server = Some(server),
-            ServerMessage::PingServer(server) => connection_resource.server = Some(server),
+            TokioServerMessage::RegisterServer(server) => connection_resource.server = Some(server),
+            TokioServerMessage::PingServer(server) => connection_resource.server = Some(server),
         }
     }
 }
 
 fn register_server_system(
     server_args: Res<ServerArgs>,
-    tokio_runtime_resource: Res<TokioRuntimeResource<ServerMessage>>,
+    tokio_runtime_resource: Res<TokioRuntimeResource<TokioServerMessage>>,
 ) {
     let tx = tokio_runtime_resource.sender.clone();
     let api_base_url = server_args.api_base_url.clone();
@@ -88,7 +153,7 @@ fn register_server_system(
 
         match result {
             Ok(server) => tx
-                .send(ServerMessage::RegisterServer(server))
+                .send(TokioServerMessage::RegisterServer(server))
                 .await
                 .unwrap(),
             Err(error) => error!(error = ?error, "Create"),
@@ -99,7 +164,7 @@ fn register_server_system(
 fn ping_server_system(
     server_args: Res<ServerArgs>,
     connection_resource: Res<ConnectionResource>,
-    tokio_runtime_resource: Res<TokioRuntimeResource<ServerMessage>>,
+    tokio_runtime_resource: Res<TokioRuntimeResource<TokioServerMessage>>,
 ) {
     if let Some(server) = &connection_resource.server {
         let now = OffsetDateTime::now_utc();
@@ -114,7 +179,10 @@ fn ping_server_system(
                 let result = ping_server(&api_base_url, &id).await;
 
                 match result {
-                    Ok(server) => tx.send(ServerMessage::PingServer(server)).await.unwrap(),
+                    Ok(server) => tx
+                        .send(TokioServerMessage::PingServer(server))
+                        .await
+                        .unwrap(),
                     Err(error) => error!(error = ?error, "Ping"),
                 }
             });
@@ -129,7 +197,7 @@ struct ApiState {
 
 fn start_webserver(
     server_args: Res<ServerArgs>,
-    tokio_runtime_resource: Res<TokioRuntimeResource<ServerMessage>>,
+    tokio_runtime_resource: Res<TokioRuntimeResource<TokioServerMessage>>,
 ) {
     let web_port = server_args.web_port;
     let api_state = ApiState {

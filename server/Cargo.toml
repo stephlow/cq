@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 axum = { workspace = true }
 bevy = { workspace = true }
+bevy_quinnet = { workspace = true }
 clap = { workspace = true }
 engine = { path = "../engine" }
 time = { workspace = true }
