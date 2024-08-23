@@ -5,5 +5,7 @@ edition = "2021"
 
 [dependencies]
 bevy = { workspace = true }
+bevy_egui = "0.29.0"
 engine = { path = "../engine" }
 tokio = { workspace = true }
+uuid = { workspace = true }
