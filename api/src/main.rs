@@ -4,12 +4,21 @@ use axum::{
     routing::{get, post},
     Extension, Json, Router,
 };
+use clap::Parser;
 use engine::models::api::{GameServer, RegisterGameServer};
 use std::{net::SocketAddr, sync::Arc};
 use time::{Duration, OffsetDateTime};
 use tokio::sync::RwLock;
 use tower_http::trace::TraceLayer;
 use uuid::Uuid;
+
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct ApiArgs {
+    /// The port to run the server on
+    #[arg(short, long, default_value = "3000")]
+    port: u16,
+}
 
 type SharedState = Arc<RwLock<ApiState>>;
 
@@ -24,6 +33,8 @@ async fn main() {
         .with_max_level(tracing::Level::DEBUG)
         .init();
 
+    let args = ApiArgs::parse();
+
     let state = SharedState::default();
 
     let app = Router::new()
@@ -32,7 +43,9 @@ async fn main() {
         .layer(Extension(state))
         .layer(TraceLayer::new_for_http());
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
+    let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", args.port))
+        .await
+        .unwrap();
     axum::serve(
         listener,
         app.into_make_service_with_connect_info::<SocketAddr>(),

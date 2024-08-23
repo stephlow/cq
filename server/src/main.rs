@@ -12,18 +12,18 @@ use tokio::sync::mpsc::channel;
 
 #[derive(Parser, Debug, Resource)]
 #[command(version, about, long_about = None)]
-struct Args {
+struct ServerArgs {
     /// The name of the server
     #[arg(short, long, default_value = "My Server")]
     name: String,
 
     /// The port to run the server on
     #[arg(short, long, default_value = "2525")]
-    port: i32,
+    port: u16,
 
     /// The port to run the management web server on
     #[arg(short, long, default_value = "3001")]
-    web_port: i32,
+    web_port: u16,
 }
 
 enum ServerMessage {
@@ -37,12 +37,11 @@ struct ConnectionResource {
 }
 
 fn main() {
-    let args = Args::parse();
-
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::DEBUG)
         .init();
 
+    let args = ServerArgs::parse();
     let (tx, rx) = channel::<ServerMessage>(10);
 
     App::new()
@@ -74,11 +73,11 @@ fn tokio_receiver_system(
 }
 
 fn register_server_system(
-    server_info: Res<Args>,
+    server_args: Res<ServerArgs>,
     tokio_runtime_resource: Res<TokioRuntimeResource<ServerMessage>>,
 ) {
     let tx = tokio_runtime_resource.sender.clone();
-    let name = server_info.name.clone();
+    let name = server_args.name.clone();
 
     tokio_runtime_resource.runtime.spawn(async move {
         let result = register_server(RegisterGameServer { name }).await;
@@ -123,12 +122,12 @@ struct ApiState {
 }
 
 fn start_webserver(
-    server_info: Res<Args>,
+    server_args: Res<ServerArgs>,
     tokio_runtime_resource: Res<TokioRuntimeResource<ServerMessage>>,
 ) {
-    let web_port = server_info.web_port.clone();
+    let web_port = server_args.web_port.clone();
     let api_state = ApiState {
-        name: server_info.name.clone(),
+        name: server_args.name.clone(),
     };
 
     tokio_runtime_resource.runtime.spawn(async move {
