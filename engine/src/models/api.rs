@@ -1,23 +1,25 @@
 use serde::{Deserialize, Serialize};
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use time::OffsetDateTime;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct GameServer {
     pub id: Uuid,
-    pub addr: SocketAddr,
+    pub addr: IpAddr,
+    pub port: u16,
     pub name: String,
     #[serde(with = "time::serde::rfc3339")]
     pub last_ping: OffsetDateTime,
 }
 
 impl GameServer {
-    pub fn new(addr: SocketAddr, name: String) -> Self {
+    pub fn new(addr: IpAddr, port: u16, name: String) -> Self {
         Self {
             id: Uuid::new_v4(),
             name,
             addr,
+            port,
             last_ping: OffsetDateTime::now_utc(),
         }
     }
@@ -29,5 +31,7 @@ impl GameServer {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct RegisterGameServer {
+    pub addr: IpAddr,
+    pub port: u16,
     pub name: String,
 }

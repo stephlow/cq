@@ -81,7 +81,7 @@ async fn register_server(
 ) -> impl IntoResponse {
     let mut state = state.write().await;
 
-    let server = GameServer::new(addr, payload.name);
+    let server = GameServer::new(payload.addr, payload.port, payload.name);
 
     state.servers.push(server.clone());
 
@@ -99,7 +99,7 @@ async fn ping_server(
     let server = state
         .servers
         .iter_mut()
-        .find(|server| server.id == id && server.addr == addr)
+        .find(|server| server.id == id)
         .unwrap();
 
     server.ping();

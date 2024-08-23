@@ -28,8 +28,11 @@ struct ServerArgs {
     #[arg(short, long, default_value = "My Server")]
     name: String,
 
-    #[arg(short, long, default_value = "http://localhost:3000")]
+    #[arg(long, default_value = "http://localhost:3000")]
     api_base_url: String,
+
+    #[arg(long, default_value = "127.0.0.1")]
+    addr: IpAddr,
 
     /// The port to run the server on
     #[arg(short, long, default_value = "2525")]
@@ -77,10 +80,13 @@ fn main() {
         .run();
 }
 
-fn start_listening(mut server: ResMut<QuinnetServer>) {
+fn start_listening(server_args: Res<ServerArgs>, mut server: ResMut<QuinnetServer>) {
     server
         .start_endpoint(
-            ServerEndpointConfiguration::from_ip(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 6000),
+            ServerEndpointConfiguration::from_ip(
+                IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
+                server_args.port,
+            ),
             CertificateRetrievalMode::GenerateSelfSigned {
                 server_hostname: "127.0.0.1".to_string(),
             },
@@ -146,10 +152,12 @@ fn register_server_system(
 ) {
     let tx = tokio_runtime_resource.sender.clone();
     let api_base_url = server_args.api_base_url.clone();
+    let addr = server_args.addr.clone();
+    let port = server_args.port.clone();
     let name = server_args.name.clone();
 
     tokio_runtime_resource.runtime.spawn(async move {
-        let result = register_server(&api_base_url, &RegisterGameServer { name }).await;
+        let result = register_server(&api_base_url, &RegisterGameServer { addr, port, name }).await;
 
         match result {
             Ok(server) => tx

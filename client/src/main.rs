@@ -186,7 +186,7 @@ fn server_browser_ui_system(
     egui::Window::new("Servers").show(contexts.ctx_mut(), |ui| {
         if let Some(servers) = &server_browser_resource.servers {
             for server in servers.iter() {
-                ui.label(format!("Server name: {}", server.name));
+                ui.label(format!("Server name: {}:{}", server.name, server.port));
                 ui.label(server.addr.to_string());
                 if ui.button("Connect").clicked() {
                     client_event_writer.send(ClientEvent::Connect(server.id));
@@ -209,12 +209,13 @@ fn event_system(
             ClientEvent::Connect(id) => {
                 if let Some(servers) = &server_browser_resource.servers {
                     if let Some(server) = servers.iter().find(|server| &server.id == id) {
-                        // TODO: Match server addr
                         client
                             .open_connection(
                                 ClientEndpointConfiguration::from_ips(
-                                    IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-                                    6000,
+                                    server.addr,
+                                    // IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+                                    server.port,
+                                    // 6000,
                                     IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
                                     0,
                                 ),
