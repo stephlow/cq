@@ -1,45 +1,50 @@
-use std::sync::mpsc::channel;
-
 use bevy::prelude::*;
 use engine::{client::list_servers, models::api::GameServer, resources::TokioRuntimeResource};
+use tokio::sync::mpsc::channel;
+
+enum ClientMessage {
+    LoadServers(Vec<GameServer>),
+}
 
 #[derive(Default, Resource)]
 struct ServerBrowser {
-    servers: Vec<GameServer>,
+    servers: Option<Vec<GameServer>>,
 }
 
 fn main() {
+    let (tx, rx) = channel::<ClientMessage>(10);
+
     App::new()
         .add_plugins(DefaultPlugins)
-        .insert_resource(TokioRuntimeResource::new())
+        .insert_resource(TokioRuntimeResource::new(tx, rx))
         .insert_resource(ServerBrowser::default())
+        .add_systems(Update, tokio_receiver_system)
         .add_systems(Startup, load_servers)
         .add_systems(Update, servers)
         .run();
 }
 
-fn load_servers(
+fn tokio_receiver_system(
     mut server_browser_resource: ResMut<ServerBrowser>,
-    tokio: Res<TokioRuntimeResource>,
+    mut tokio_runtime_resource: ResMut<TokioRuntimeResource<ClientMessage>>,
 ) {
-    let (tx, rx) = channel();
+    match tokio_runtime_resource.receiver.try_recv() {
+        Ok(message) => match message {
+            ClientMessage::LoadServers(server) => server_browser_resource.servers = Some(server),
+        },
+        Err(_) => {}
+    }
+}
+
+fn load_servers(tokio: Res<TokioRuntimeResource<ClientMessage>>) {
+    let tx = tokio.sender.clone();
 
     tokio.runtime.spawn(async move {
         match list_servers().await {
-            Ok(servers) => tx.send(servers).unwrap(),
+            Ok(servers) => tx.send(ClientMessage::LoadServers(servers)).await.unwrap(),
             Err(error) => error!(error = ?error, "Load servers"),
         }
     });
-
-    loop {
-        match rx.try_recv() {
-            Ok(servers) => {
-                server_browser_resource.servers = servers;
-                break;
-            }
-            Err(_) => {}
-        }
-    }
 }
 
 fn servers(server_browser_resource: Res<ServerBrowser>) {
