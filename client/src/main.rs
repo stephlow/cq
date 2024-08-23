@@ -1,8 +1,16 @@
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts, EguiPlugin};
-use engine::{client::list_servers, models::api::GameServer, resources::TokioRuntimeResource};
+use clap::Parser;
+use engine::{api_client::list_servers, models::api::GameServer, resources::TokioRuntimeResource};
 use tokio::sync::mpsc::channel;
 use uuid::Uuid;
+
+#[derive(Parser, Debug, Resource)]
+#[command(version, about, long_about = None)]
+struct ClientArgs {
+    #[arg(short, long, default_value = "http://localhost:3000")]
+    api_base_url: String,
+}
 
 #[derive(Event)]
 enum ClientEvent {
@@ -19,12 +27,14 @@ struct ServerBrowser {
 }
 
 fn main() {
+    let args = ClientArgs::parse();
     let (tx, rx) = channel::<ClientMessage>(10);
 
     App::new()
         .add_plugins(DefaultPlugins)
         .add_plugins(EguiPlugin)
         .add_event::<ClientEvent>()
+        .insert_resource(args)
         .insert_resource(TokioRuntimeResource::new(tx, rx))
         .insert_resource(ServerBrowser::default())
         .add_systems(Update, tokio_receiver_system)
@@ -45,11 +55,12 @@ fn tokio_receiver_system(
     }
 }
 
-fn load_servers(tokio: Res<TokioRuntimeResource<ClientMessage>>) {
+fn load_servers(client_args: Res<ClientArgs>, tokio: Res<TokioRuntimeResource<ClientMessage>>) {
+    let api_base_url = client_args.api_base_url.clone();
     let tx = tokio.sender.clone();
 
     tokio.runtime.spawn(async move {
-        match list_servers().await {
+        match list_servers(&api_base_url).await {
             Ok(servers) => tx.send(ClientMessage::LoadServers(servers)).await.unwrap(),
             Err(error) => error!(error = ?error, "Load servers"),
         }

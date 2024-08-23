@@ -2,7 +2,7 @@ use axum::{response::IntoResponse, routing::get, Router};
 use bevy::{app::ScheduleRunnerPlugin, log::tracing_subscriber, prelude::*};
 use clap::{arg, Parser};
 use engine::{
-    client::{ping_server, register_server},
+    api_client::{ping_server, register_server},
     models::api::{GameServer, RegisterGameServer},
     resources::TokioRuntimeResource,
 };
@@ -16,6 +16,9 @@ struct ServerArgs {
     /// The name of the server
     #[arg(short, long, default_value = "My Server")]
     name: String,
+
+    #[arg(short, long, default_value = "http://localhost:3000")]
+    api_base_url: String,
 
     /// The port to run the server on
     #[arg(short, long, default_value = "2525")]
@@ -77,10 +80,11 @@ fn register_server_system(
     tokio_runtime_resource: Res<TokioRuntimeResource<ServerMessage>>,
 ) {
     let tx = tokio_runtime_resource.sender.clone();
+    let api_base_url = server_args.api_base_url.clone();
     let name = server_args.name.clone();
 
     tokio_runtime_resource.runtime.spawn(async move {
-        let result = register_server(RegisterGameServer { name }).await;
+        let result = register_server(&api_base_url, &RegisterGameServer { name }).await;
 
         match result {
             Ok(server) => tx
@@ -93,6 +97,7 @@ fn register_server_system(
 }
 
 fn ping_server_system(
+    server_args: Res<ServerArgs>,
     connection_resource: Res<ConnectionResource>,
     tokio_runtime_resource: Res<TokioRuntimeResource<ServerMessage>>,
 ) {
@@ -102,10 +107,11 @@ fn ping_server_system(
         if now - server.last_ping >= Duration::from_secs(10) {
             let tx = tokio_runtime_resource.sender.clone();
 
+            let api_base_url = server_args.api_base_url.clone();
             let id = server.id;
 
             tokio_runtime_resource.runtime.spawn(async move {
-                let result = ping_server(&id).await;
+                let result = ping_server(&api_base_url, &id).await;
 
                 match result {
                     Ok(server) => tx.send(ServerMessage::PingServer(server)).await.unwrap(),

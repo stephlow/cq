@@ -12,9 +12,9 @@ static CLIENT: Lazy<Client> = Lazy::new(|| {
         .expect("failed to initialize client")
 });
 
-pub async fn list_servers() -> Result<Vec<GameServer>> {
+pub async fn list_servers(api_base_url: &str) -> Result<Vec<GameServer>> {
     let response = CLIENT
-        .request(Method::GET, "http://localhost:3000/servers")
+        .request(Method::GET, format!("{api_base_url}/servers"))
         .send()
         .await?;
 
@@ -23,10 +23,13 @@ pub async fn list_servers() -> Result<Vec<GameServer>> {
     Ok(servers)
 }
 
-pub async fn register_server(new_server: RegisterGameServer) -> Result<GameServer> {
+pub async fn register_server(
+    api_base_url: &str,
+    new_server: &RegisterGameServer,
+) -> Result<GameServer> {
     let response = CLIENT
-        .request(Method::POST, "http://localhost:3000/servers")
-        .json(&new_server)
+        .request(Method::POST, format!("{api_base_url}/servers"))
+        .json(new_server)
         .send()
         .await?;
 
@@ -35,12 +38,9 @@ pub async fn register_server(new_server: RegisterGameServer) -> Result<GameServe
     Ok(server)
 }
 
-pub async fn ping_server(id: &Uuid) -> Result<GameServer> {
+pub async fn ping_server(api_base_url: &str, id: &Uuid) -> Result<GameServer> {
     let response = CLIENT
-        .request(
-            Method::POST,
-            format!("http://localhost:3000/servers/{id}/ping"),
-        )
+        .request(Method::POST, format!("{api_base_url}/servers/{id}/ping"))
         .send()
         .await?;
 
