@@ -1,3 +1,4 @@
+use axum::{response::IntoResponse, routing::get, Router};
 use bevy::{app::ScheduleRunnerPlugin, log::tracing_subscriber, prelude::*};
 use engine::{
     client::{ping_server, register_server},
@@ -36,6 +37,7 @@ fn main() {
         .add_systems(Update, tokio_receiver_system)
         .add_systems(Startup, register_server_system)
         .add_systems(Update, ping_server_system)
+        .add_systems(Startup, start_webserver)
         .run();
 }
 
@@ -92,4 +94,17 @@ fn ping_server_system(
             });
         }
     }
+}
+
+fn start_webserver(tokio_runtime_resource: Res<TokioRuntimeResource<ServerMessage>>) {
+    tokio_runtime_resource.runtime.spawn(async move {
+        let app = Router::new().route("/", get(get_root));
+
+        let listener = tokio::net::TcpListener::bind("0.0.0.0:3001").await.unwrap();
+        axum::serve(listener, app).await
+    });
+}
+
+async fn get_root() -> impl IntoResponse {
+    "Hello world"
 }
