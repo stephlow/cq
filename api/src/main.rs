@@ -6,6 +6,7 @@ use axum::{
 };
 use engine::models::api::{GameServer, RegisterGameServer};
 use std::{net::SocketAddr, sync::Arc};
+use time::{Duration, OffsetDateTime};
 use tokio::sync::RwLock;
 use tower_http::trace::TraceLayer;
 use uuid::Uuid;
@@ -44,7 +45,17 @@ async fn main() {
 async fn list_servers(Extension(state): Extension<SharedState>) -> impl IntoResponse {
     let state = state.read().await;
 
-    let servers = state.servers.clone();
+    // TODO: Do a proper cleanup
+    let servers: Vec<GameServer> = state
+        .servers
+        .iter()
+        .filter(|server| {
+            let now = OffsetDateTime::now_utc();
+
+            now - server.last_ping <= Duration::seconds(30)
+        })
+        .cloned()
+        .collect();
 
     Json(servers)
 }
