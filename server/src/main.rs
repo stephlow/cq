@@ -131,7 +131,7 @@ fn start_webserver(
     server_args: Res<ServerArgs>,
     tokio_runtime_resource: Res<TokioRuntimeResource<ServerMessage>>,
 ) {
-    let web_port = server_args.web_port.clone();
+    let web_port = server_args.web_port;
     let api_state = ApiState {
         name: server_args.name.clone(),
     };
