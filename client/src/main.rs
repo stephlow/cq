@@ -28,12 +28,9 @@ fn tokio_receiver_system(
     mut server_browser_resource: ResMut<ServerBrowser>,
     mut tokio_runtime_resource: ResMut<TokioRuntimeResource<ClientMessage>>,
 ) {
-    match tokio_runtime_resource.receiver.try_recv() {
-        Ok(message) => match message {
-            ClientMessage::LoadServers(server) => server_browser_resource.servers = Some(server),
-        },
-        Err(_) => {}
-    }
+    if let Ok(message) = tokio_runtime_resource.receiver.try_recv() { match message {
+        ClientMessage::LoadServers(server) => server_browser_resource.servers = Some(server),
+    } }
 }
 
 fn load_servers(tokio: Res<TokioRuntimeResource<ClientMessage>>) {

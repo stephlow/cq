@@ -43,12 +43,11 @@ fn tokio_receiver_system(
     mut connection_resource: ResMut<ConnectionResource>,
     mut tokio_runtime_resource: ResMut<TokioRuntimeResource<ServerMessage>>,
 ) {
-    match tokio_runtime_resource.receiver.try_recv() {
-        Ok(message) => match message {
+    if let Ok(message) = tokio_runtime_resource.receiver.try_recv() {
+        match message {
             ServerMessage::RegisterServer(server) => connection_resource.server = Some(server),
             ServerMessage::PingServer(server) => connection_resource.server = Some(server),
-        },
-        Err(_) => {}
+        }
     }
 }
 
@@ -81,7 +80,7 @@ fn ping_server_system(
         if now - server.last_ping >= Duration::from_secs(10) {
             let tx = tokio_runtime_resource.sender.clone();
 
-            let id = server.id.clone();
+            let id = server.id;
 
             tokio_runtime_resource.runtime.spawn(async move {
                 let result = ping_server(&id).await;
