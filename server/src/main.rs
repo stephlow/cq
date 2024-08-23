@@ -1,5 +1,6 @@
 use axum::{response::IntoResponse, routing::get, Router};
 use bevy::{app::ScheduleRunnerPlugin, log::tracing_subscriber, prelude::*};
+use clap::{arg, Parser};
 use engine::{
     client::{ping_server, register_server},
     models::api::{GameServer, RegisterGameServer},
@@ -8,6 +9,22 @@ use engine::{
 use std::time::Duration;
 use time::OffsetDateTime;
 use tokio::sync::mpsc::channel;
+
+#[derive(Parser, Debug, Resource)]
+#[command(version, about, long_about = None)]
+struct Args {
+    /// The name of the server
+    #[arg(short, long, default_value = "My Server")]
+    name: String,
+
+    /// The port to run the server on
+    #[arg(short, long, default_value = "2525")]
+    port: i32,
+
+    /// The port to run the management web server on
+    #[arg(short, long, default_value = "3001")]
+    web_port: i32,
+}
 
 enum ServerMessage {
     RegisterServer(GameServer),
@@ -20,6 +37,8 @@ struct ConnectionResource {
 }
 
 fn main() {
+    let args = Args::parse();
+
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::DEBUG)
         .init();
@@ -32,6 +51,7 @@ fn main() {
                 1.0 / 60.0,
             ))),
         )
+        .insert_resource(args)
         .insert_resource(ConnectionResource::default())
         .insert_resource(TokioRuntimeResource::new(tx, rx))
         .add_systems(Update, tokio_receiver_system)
@@ -53,14 +73,15 @@ fn tokio_receiver_system(
     }
 }
 
-fn register_server_system(tokio_runtime_resource: Res<TokioRuntimeResource<ServerMessage>>) {
+fn register_server_system(
+    server_info: Res<Args>,
+    tokio_runtime_resource: Res<TokioRuntimeResource<ServerMessage>>,
+) {
     let tx = tokio_runtime_resource.sender.clone();
+    let name = server_info.name.clone();
 
     tokio_runtime_resource.runtime.spawn(async move {
-        let result = register_server(RegisterGameServer {
-            name: "Hello world".to_string(),
-        })
-        .await;
+        let result = register_server(RegisterGameServer { name }).await;
 
         match result {
             Ok(server) => tx
@@ -96,15 +117,35 @@ fn ping_server_system(
     }
 }
 
-fn start_webserver(tokio_runtime_resource: Res<TokioRuntimeResource<ServerMessage>>) {
-    tokio_runtime_resource.runtime.spawn(async move {
-        let app = Router::new().route("/", get(get_root));
+#[derive(Clone)]
+struct ApiState {
+    pub name: String,
+}
 
-        let listener = tokio::net::TcpListener::bind("0.0.0.0:3001").await.unwrap();
+fn start_webserver(
+    server_info: Res<Args>,
+    tokio_runtime_resource: Res<TokioRuntimeResource<ServerMessage>>,
+) {
+    let web_port = server_info.web_port.clone();
+    let api_state = ApiState {
+        name: server_info.name.clone(),
+    };
+
+    tokio_runtime_resource.runtime.spawn(async move {
+        let app = Router::new()
+            .route("/", get(get_root))
+            .with_state(api_state);
+
+        let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", web_port))
+            .await
+            .unwrap();
         axum::serve(listener, app).await
     });
 }
 
-async fn get_root() -> impl IntoResponse {
-    "Hello world"
+#[axum::debug_handler]
+async fn get_root(
+    axum::extract::State(api_state): axum::extract::State<ApiState>,
+) -> impl IntoResponse {
+    format!("Server name: {}", api_state.name)
 }
