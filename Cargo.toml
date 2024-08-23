@@ -1,5 +1,13 @@
 [workspace]
-members = ["client", "engine", "server"]
+members = ["api", "client", "engine", "server"]
 
 [workspace.dependencies]
+anyhow = "1.0.86"
 bevy = "0.14.1"
+serde = { version = "1.0.208", features = ["derive"] }
+serde_json = "1.0.125"
+time = { version = "0.3.36", features = ["formatting", "parsing", "serde"] }
+tokio = { version = "1.39.3", features = ["rt-multi-thread"] }
+tracing = "0.1.40"
+tracing-subscriber = "0.3.18"
+uuid = { version = "1.10.0", features = ["v4"] }
