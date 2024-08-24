@@ -124,8 +124,11 @@ fn init_database(tokio_runtime_resource: Res<TokioRuntimeResource<TokioServerMes
         }
 
         let db = SqlitePool::connect(DB_URL).await.unwrap();
-        let result = sqlx::query("CREATE TABLE IF NOT EXISTS users (client_id INTEGER NOT NULL, user_id UUID UNIQUE NOT NULL, last_ping TIMESTAMPZ NOT NULL);").execute(&db).await.unwrap();
-        println!("Create user table result: {:?}", result);
+        let result = sqlx::query("CREATE TABLE IF NOT EXISTS users (client_id INTEGER NOT NULL, user_id UUID UNIQUE NOT NULL, last_ping DATETIME NOT NULL);").execute(&db).await.unwrap();
+        println!("Create users table result: {:?}", result);
+
+        let result = sqlx::query("CREATE TABLE IF NOT EXISTS messages (user_id UUID NOT NULL, content TEXT NOT NULL, sent_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL);").execute(&db).await.unwrap();
+        println!("Create messages table result: {:?}", result);
 
         tx.send(TokioServerMessage::InitializePool(db))
             .await
@@ -213,6 +216,24 @@ fn handle_client_messages(
                     endpoint.disconnect_client(client_id).unwrap();
                 }
                 ClientMessage::ChatMessage { message } => {
+                    if let Some(db) = &database_resource.pool {
+                        let db = db.clone();
+                        // TODO:
+                        let db_client_id: i32 =
+                            client_id.try_into().expect("error converting client_id");
+
+                        let message = message.clone();
+                        tokio_runtime_resource.runtime.spawn(async move {
+                            let user: UserRow = query_as("SELECT * FROM users WHERE client_id = $1").bind(db_client_id).fetch_one(&db).await.unwrap();
+
+                            query("INSERT INTO messages (user_id, content) VALUES ($1, $2) RETURNING *;")
+                            .bind(user.user_id)
+                            .bind(message)
+                            .fetch_one(&db)
+                            .await
+                            .unwrap();
+                        });
+                    }
                     endpoint
                         .broadcast_message(ServerMessage::ChatMessage { client_id, message })
                         .unwrap();
