@@ -76,7 +76,8 @@ async fn list_servers(Extension(state): Extension<SharedState>) -> impl IntoResp
 #[axum::debug_handler]
 async fn register_server(
     Extension(state): Extension<SharedState>,
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    // TODO: Verify addr
+    ConnectInfo(_addr): ConnectInfo<SocketAddr>,
     Json(payload): Json<RegisterGameServer>,
 ) -> impl IntoResponse {
     let mut state = state.write().await;
@@ -92,7 +93,8 @@ async fn register_server(
 async fn ping_server(
     Path(id): Path<Uuid>,
     Extension(state): Extension<SharedState>,
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    // TODO: Verify addr
+    ConnectInfo(_addr): ConnectInfo<SocketAddr>,
 ) -> impl IntoResponse {
     let mut state = state.write().await;
 

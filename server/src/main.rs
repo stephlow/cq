@@ -109,7 +109,7 @@ fn handle_client_messages(
                 ClientMessage::Join { username } => {
                     endpoint
                         .broadcast_message(ServerMessage::ClientConnected {
-                            client_id: client_id.clone(),
+                            client_id,
                             username: username.clone(),
                         })
                         .unwrap();
@@ -151,8 +151,8 @@ fn register_server_system(
 ) {
     let tx = tokio_runtime_resource.sender.clone();
     let api_base_url = server_args.api_base_url.clone();
-    let addr = server_args.addr.clone();
-    let port = server_args.port.clone();
+    let addr = server_args.addr;
+    let port = server_args.port;
     let name = server_args.name.clone();
 
     tokio_runtime_resource.runtime.spawn(async move {

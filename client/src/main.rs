@@ -1,4 +1,4 @@
-use bevy::{prelude::*, reflect::Map};
+use bevy::prelude::*;
 use bevy_egui::{
     egui::{self},
     EguiContexts, EguiPlugin,
@@ -201,7 +201,7 @@ fn server_ui_system(
 
             let username = server_info
                 .connected
-                .get(&client_id)
+                .get(client_id)
                 .unwrap_or(&client_id_string);
 
             ui.label(format!("{}: {}", username, message));
@@ -268,7 +268,7 @@ fn event_system(
                                 ChannelsConfiguration::default(),
                             )
                             .unwrap();
-                        server_info.id = Some(id.clone());
+                        server_info.id = Some(*id);
                         server_info
                             .connected
                             .insert(client_id, username_input_state.text.clone());
