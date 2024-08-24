@@ -4,7 +4,10 @@ use axum::{
 };
 use clap::Parser;
 use engine::models::api::GameServer;
-use handlers::servers::{list_servers, ping_server, register_server};
+use handlers::{
+    auth::{authenticate, profile},
+    servers::{list_servers, ping_server, register_server},
+};
 use std::{net::SocketAddr, sync::Arc};
 use tokio::sync::RwLock;
 use tower_http::trace::TraceLayer;
@@ -37,6 +40,7 @@ async fn main() {
     let state = SharedState::default();
 
     let app = Router::new()
+        .route("/auth", get(profile).post(authenticate))
         .route("/servers", get(list_servers).post(register_server))
         .route("/servers/:id/ping", post(ping_server))
         .layer(Extension(state))

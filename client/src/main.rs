@@ -13,8 +13,8 @@ use bevy_quinnet::{
 };
 use clap::Parser;
 use engine::{
-    api_client::list_servers,
-    models::api::GameServer,
+    api_client::{self, list_servers},
+    models::api::{auth::Credentials, GameServer},
     network::{ClientMessage, ServerMessage},
     resources::TokioRuntimeResource,
 };
@@ -173,6 +173,27 @@ fn load_servers(
                 .unwrap(),
             Err(error) => error!(error = ?error, "Load servers"),
         }
+    });
+
+    let api_base_url = client_args.api_base_url.clone();
+    tokio.runtime.spawn(async move {
+        let auth_response = api_client::authenticate(
+            &api_base_url,
+            Credentials {
+                username: "1234".to_string(),
+                password: "1234".to_string(),
+            },
+        )
+        .await
+        .unwrap();
+
+        println!("AUTH!");
+
+        let user = api_client::get_profile(&api_base_url, &auth_response.token)
+            .await
+            .unwrap();
+
+        println!("USERID: {}", user.id);
     });
 }
 

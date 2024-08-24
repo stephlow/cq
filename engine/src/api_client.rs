@@ -1,4 +1,8 @@
-use crate::models::api::{GameServer, RegisterGameServer};
+use crate::models::api::{
+    auth::{AuthResponse, Credentials},
+    users::User,
+    GameServer, RegisterGameServer,
+};
 use anyhow::Result;
 use once_cell::sync::Lazy;
 use reqwest::{Client, Method};
@@ -11,6 +15,30 @@ static CLIENT: Lazy<Client> = Lazy::new(|| {
         .build()
         .expect("failed to initialize client")
 });
+
+pub async fn authenticate(api_base_url: &str, credentials: Credentials) -> Result<AuthResponse> {
+    let response = CLIENT
+        .request(Method::POST, format!("{api_base_url}/auth"))
+        .json(&credentials)
+        .send()
+        .await?;
+
+    let auth_response = response.json::<AuthResponse>().await?;
+
+    Ok(auth_response)
+}
+
+pub async fn get_profile(api_base_url: &str, token: &str) -> Result<User> {
+    let response = CLIENT
+        .request(Method::GET, format!("{api_base_url}/auth"))
+        .header("Authorization", format!("Bearer: {}", token))
+        .send()
+        .await?;
+
+    let user = response.json::<User>().await.unwrap();
+
+    Ok(user)
+}
 
 pub async fn list_servers(api_base_url: &str) -> Result<Vec<GameServer>> {
     let response = CLIENT

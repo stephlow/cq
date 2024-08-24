@@ -3,6 +3,9 @@ use std::net::IpAddr;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
+pub mod auth;
+pub mod users;
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct GameServer {
     pub id: Uuid,
