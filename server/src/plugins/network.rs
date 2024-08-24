@@ -1,12 +1,12 @@
 use super::database::{models::UserRow, SqliteServer};
-use crate::{ServerArgs, TokioServerMessage};
+use crate::{ServerArgs, ServerStateResource, TokioServerMessage};
 use bevy::prelude::*;
 use bevy_quinnet::{
     server::{
         certificate::CertificateRetrievalMode, QuinnetServer, QuinnetServerPlugin,
         ServerEndpointConfiguration,
     },
-    shared::{channels::ChannelsConfiguration, ClientId},
+    shared::channels::ChannelsConfiguration,
 };
 use engine::{
     api_client::{ping_server, register_server},
@@ -15,16 +15,11 @@ use engine::{
     resources::TokioRuntimeResource,
 };
 use sqlx::{query, query_as};
-use std::{
-    collections::HashMap,
-    net::{IpAddr, Ipv4Addr},
-};
+use std::net::{IpAddr, Ipv4Addr};
 use time::{Duration, OffsetDateTime};
-use uuid::Uuid;
 
 #[derive(Resource)]
 pub struct ConnectionResource {
-    pub users: HashMap<ClientId, Uuid>,
     pub server: Option<Server>,
     pub last_ping_attempt: OffsetDateTime,
 }
@@ -32,7 +27,6 @@ pub struct ConnectionResource {
 impl Default for ConnectionResource {
     fn default() -> Self {
         Self {
-            users: HashMap::new(),
             server: None,
             last_ping_attempt: OffsetDateTime::now_utc(),
         }
@@ -82,10 +76,10 @@ fn start_listening(server_config: Res<ServerConfig>, mut server: ResMut<QuinnetS
 }
 
 fn handle_client_messages(
-    mut connection_resource: ResMut<ConnectionResource>,
     mut server: ResMut<QuinnetServer>,
     sqlite_server: Res<SqliteServer>,
     tokio_runtime_resource: Res<TokioRuntimeResource<TokioServerMessage>>,
+    server_state_resource: Res<ServerStateResource>,
 ) {
     let endpoint = server.endpoint_mut();
     for client_id in endpoint.clients() {
@@ -94,6 +88,9 @@ fn handle_client_messages(
         {
             match message {
                 ClientMessage::Join { user_id } => {
+                    let mut server_state = server_state_resource.0.lock().unwrap();
+                    server_state.connections.insert(client_id, user_id);
+
                     if let Some(db) = &sqlite_server.pool {
                         let db = db.clone();
                         // TODO:
@@ -111,9 +108,8 @@ fn handle_client_messages(
                     endpoint
                         .broadcast_message(ServerMessage::ClientConnected { client_id, user_id })
                         .unwrap();
-                    connection_resource.users.insert(client_id, user_id);
 
-                    for (user_client_id, user_id) in connection_resource.users.iter() {
+                    for (user_client_id, user_id) in server_state.connections.iter() {
                         endpoint
                             .send_message(
                                 client_id,
@@ -126,6 +122,9 @@ fn handle_client_messages(
                     }
                 }
                 ClientMessage::Disconnect {} => {
+                    let mut server_state = server_state_resource.0.lock().unwrap();
+                    server_state.connections.remove(&client_id);
+
                     if let Some(db) = &sqlite_server.pool {
                         let db = db.clone();
                         // TODO:
@@ -138,7 +137,6 @@ fn handle_client_messages(
                                 .await
                         });
                     }
-                    connection_resource.users.remove(&client_id);
                     endpoint
                         .broadcast_message(ServerMessage::ClientDisconnected { client_id })
                         .unwrap();

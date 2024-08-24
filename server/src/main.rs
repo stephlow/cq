@@ -1,13 +1,23 @@
+use anyhow::Result;
+use axum::{routing::get, Extension, Json, Router};
 use bevy::{app::ScheduleRunnerPlugin, log::tracing_subscriber, prelude::*};
+use bevy_quinnet::shared::ClientId;
 use clap::{arg, Parser};
 use engine::{models::api::servers::Server, resources::TokioRuntimeResource};
 use plugins::{
     database::{DatabasePlugin, SqliteServer},
     network::{ConnectionResource, NetworkPlugin},
-    webserver::WebServerPlugin,
+    // webserver::WebServerPlugin,
 };
+use serde::Serialize;
 use sqlx::{Pool, Sqlite};
-use std::{net::IpAddr, time::Duration};
+use std::{
+    collections::HashMap,
+    net::IpAddr,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
+use uuid::Uuid;
 
 mod plugins;
 
@@ -39,7 +49,19 @@ enum TokioServerMessage {
     RegisterServer(Server),
 }
 
-fn main() {
+#[derive(Default, Serialize, Clone)]
+struct ServerState {
+    connections: HashMap<ClientId, Uuid>,
+}
+
+// TODO: Should move to non-locking message passing
+type ArcMutexServerState = Arc<Mutex<ServerState>>;
+
+#[derive(Resource)]
+struct ServerStateResource(ArcMutexServerState);
+
+#[tokio::main]
+async fn main() -> Result<()> {
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::DEBUG)
         .init();
@@ -48,19 +70,44 @@ fn main() {
     let port = args.port.clone();
     let web_port = args.web_port.clone();
 
-    App::new()
-        .add_plugins(
-            MinimalPlugins.set(ScheduleRunnerPlugin::run_loop(Duration::from_secs_f64(
-                1.0 / 60.0,
-            ))),
-        )
-        .insert_resource(args)
-        .insert_resource(TokioRuntimeResource::<TokioServerMessage>::new())
-        .add_systems(Update, tokio_receiver_system)
-        .add_plugins(DatabasePlugin)
-        .add_plugins(NetworkPlugin::new(port))
-        .add_plugins(WebServerPlugin::new(web_port))
-        .run();
+    let server_state = ArcMutexServerState::default();
+    let server_state_resource = ServerStateResource(server_state.clone());
+
+    let app_handle = tokio::spawn(async move {
+        App::new()
+            .add_plugins(MinimalPlugins.set(ScheduleRunnerPlugin::run_loop(
+                Duration::from_secs_f64(1.0 / 60.0),
+            )))
+            .insert_resource(server_state_resource)
+            .insert_resource(args)
+            .insert_resource(TokioRuntimeResource::<TokioServerMessage>::new())
+            .add_systems(Update, tokio_receiver_system)
+            .add_plugins(DatabasePlugin)
+            .add_plugins(NetworkPlugin::new(port))
+            // .add_plugins(WebServerPlugin::new(web_port))
+            .run();
+    });
+
+    let app = Router::new()
+        .route("/", get(get_root))
+        .layer(Extension(server_state));
+
+    let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", web_port))
+        .await
+        .unwrap();
+
+    axum::serve(listener, app).await.unwrap();
+
+    app_handle.await.unwrap();
+
+    Ok(())
+}
+
+#[axum::debug_handler]
+async fn get_root(Extension(server_state): Extension<ArcMutexServerState>) -> Json<ServerState> {
+    let value = server_state.lock().unwrap();
+    let server_state: ServerState = value.clone();
+    Json(server_state)
 }
 
 fn tokio_receiver_system(
