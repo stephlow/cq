@@ -1,4 +1,4 @@
-use bevy::prelude::*;
+use bevy::{prelude::*, reflect::Map};
 use bevy_egui::{
     egui::{self},
     EguiContexts, EguiPlugin,
@@ -37,6 +37,11 @@ struct UsernameInputState {
     text: String,
 }
 
+#[derive(Default, Resource)]
+struct ChatInputState {
+    text: String,
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default, States)]
 pub enum ConnectionState {
     Connected,
@@ -63,6 +68,7 @@ struct ServerBrowser {
 struct ServerInfo {
     id: Option<Uuid>,
     connected: HashMap<ClientId, String>,
+    messages: Vec<(ClientId, String)>,
 }
 
 fn main() {
@@ -82,6 +88,7 @@ fn main() {
         .add_event::<ClientEvent>()
         .insert_resource(args)
         .insert_resource(UsernameInputState::default())
+        .insert_resource(ChatInputState::default())
         .insert_resource(TokioRuntimeResource::new(tx, rx))
         .insert_resource(ServerBrowser::default())
         .insert_resource(ServerInfo::default())
@@ -131,7 +138,9 @@ fn handle_server_messages(mut client: ResMut<QuinnetClient>, mut server_info: Re
             ServerMessage::ClientDisconnected { client_id } => {
                 server_info.connected.remove(&client_id);
             }
-            ServerMessage::ChatMessage { client_id, message } => { /*...*/ }
+            ServerMessage::ChatMessage { client_id, message } => {
+                server_info.messages.push((client_id, message));
+            }
         }
     }
 }
@@ -171,6 +180,8 @@ fn server_ui_system(
     mut contexts: EguiContexts,
     mut client_event_writer: EventWriter<ClientEvent>,
     server_info: Res<ServerInfo>,
+    mut chat_input_state: ResMut<ChatInputState>,
+    client: Res<QuinnetClient>,
 ) {
     egui::Window::new("Server").show(contexts.ctx_mut(), |ui| {
         ui.label("Connected");
@@ -180,6 +191,30 @@ fn server_ui_system(
         ui.label("Connected users:");
         for (_client_id, username) in server_info.connected.iter() {
             ui.label(username);
+        }
+    });
+
+    egui::Window::new("Chat").show(contexts.ctx_mut(), |ui| {
+        for (client_id, message) in server_info.messages.iter() {
+            // TODO: Handle properly
+            let client_id_string: String = format!("{client_id}");
+
+            let username = server_info
+                .connected
+                .get(&client_id)
+                .unwrap_or(&client_id_string);
+
+            ui.label(format!("{}: {}", username, message));
+        }
+
+        ui.text_edit_singleline(&mut chat_input_state.text);
+        if ui.button("Send").clicked() {
+            let message = chat_input_state.text.clone();
+            client
+                .connection()
+                .send_message(ClientMessage::ChatMessage { message })
+                .unwrap();
+            chat_input_state.text = String::from("");
         }
     });
 }

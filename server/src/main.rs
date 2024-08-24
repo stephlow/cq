@@ -124,14 +124,9 @@ fn handle_client_messages(
                     endpoint.disconnect_client(client_id).unwrap();
                 }
                 ClientMessage::ChatMessage { message } => {
-                    // Send a message to a group of clients
-                    // endpoint
-                    //     .send_group_message(
-                    //         client_group, // Iterator of ClientId
-                    //         ServerMessage::ChatMessage {/*...*/},
-                    //     )
-                    //     .unwrap();
-                    /*...*/
+                    endpoint
+                        .broadcast_message(ServerMessage::ChatMessage { client_id, message })
+                        .unwrap();
                 }
             }
         }
