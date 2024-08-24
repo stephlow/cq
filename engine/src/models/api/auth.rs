@@ -1,7 +1,5 @@
 use serde::{Deserialize, Serialize};
 
-use crate::models;
-
 #[derive(Serialize, Deserialize)]
 pub struct Credentials {
     pub username: String,

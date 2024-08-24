@@ -1,8 +1,7 @@
 use crate::models::api::{
     auth::{AuthResponse, Credentials},
-    servers::RegisterServer,
-    servers::Server,
-    users::User,
+    servers::{RegisterServer, Server},
+    users::{NewUser, User},
 };
 use anyhow::Result;
 use once_cell::sync::Lazy;
@@ -37,6 +36,18 @@ pub async fn get_profile(api_base_url: &str, token: &str) -> Result<User> {
         .await?;
 
     let user = response.json::<User>().await.unwrap();
+
+    Ok(user)
+}
+
+pub async fn register_user(api_base_url: &str, new_user: NewUser) -> Result<AuthResponse> {
+    let response = CLIENT
+        .request(Method::POST, format!("{api_base_url}/users"))
+        .json(&new_user)
+        .send()
+        .await?;
+
+    let user = response.json::<AuthResponse>().await?;
 
     Ok(user)
 }

@@ -1,5 +1,6 @@
 use anyhow::Result;
-use axum::{http::HeaderMap, response::IntoResponse, Extension, Json};
+use axum::{http::HeaderMap, Extension, Json};
+use bcrypt::verify;
 use engine::models;
 use josekit::{
     jws::JwsHeader,
@@ -12,25 +13,28 @@ use uuid::Uuid;
 pub async fn authenticate(
     Extension(pool): Extension<PgPool>,
     Json(credentials): Json<models::api::auth::Credentials>,
-) -> impl IntoResponse {
-    // TODO: Verify pass
-    let user: models::data::users::User =
-        query_as("SELECT * FROM users WHERE username = $1 AND password_hash = $2;")
-            .bind(credentials.username)
-            .bind(credentials.password)
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+) -> Result<Json<models::api::auth::AuthResponse>, ()> {
+    let user: models::data::users::User = query_as("SELECT * FROM users WHERE username = $1;")
+        .bind(credentials.username)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
 
-    let mut header = JwsHeader::new();
-    header.set_token_type("JWT");
+    let verified = verify(credentials.password, &user.password_hash).unwrap();
 
-    let mut payload = JwtPayload::new();
-    payload.set_subject(user.id.to_string().as_str());
+    if verified {
+        let mut header = JwsHeader::new();
+        header.set_token_type("JWT");
 
-    let token = jwt::encode_unsecured(&payload, &header).unwrap();
+        let mut payload = JwtPayload::new();
+        payload.set_subject(user.id.to_string().as_str());
 
-    Json(models::api::auth::AuthResponse { token })
+        let token = jwt::encode_unsecured(&payload, &header).unwrap();
+
+        return Ok(Json(models::api::auth::AuthResponse { token }));
+    }
+
+    Err(())
 }
 
 pub async fn profile(

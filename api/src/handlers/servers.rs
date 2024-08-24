@@ -5,7 +5,6 @@ use axum::{
     Extension, Json,
 };
 use engine::models::api::servers::{RegisterServer, Server};
-use sqlx::{query_as, PgPool};
 use std::net::SocketAddr;
 use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
