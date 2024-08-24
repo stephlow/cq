@@ -14,6 +14,7 @@ use engine::{
     network::{ClientMessage, ServerMessage},
     resources::TokioRuntimeResource,
 };
+use sqlx::{migrate::MigrateDatabase, Pool, Sqlite, SqlitePool};
 use std::{
     net::{IpAddr, Ipv4Addr},
     time::Duration,
@@ -45,14 +46,20 @@ struct ServerArgs {
 }
 
 enum TokioServerMessage {
-    RegisterServer(Server),
+    InitializePool(Pool<Sqlite>),
     PingServer(Server),
+    RegisterServer(Server),
 }
 
 #[derive(Default, Resource)]
 struct ConnectionResource {
     users: HashMap<ClientId, Uuid>,
     server: Option<Server>,
+}
+
+#[derive(Default, Resource)]
+struct DatabaseResource {
+    pool: Option<Pool<Sqlite>>,
 }
 
 fn main() {
@@ -76,10 +83,36 @@ fn main() {
         .insert_resource(ConnectionResource::default())
         .insert_resource(TokioRuntimeResource::new(tx, rx))
         .add_systems(Update, tokio_receiver_system)
+        .insert_resource(DatabaseResource::default())
+        .add_systems(Startup, init_database)
         .add_systems(Startup, register_server_system)
         .add_systems(Update, ping_server_system)
         .add_systems(Startup, start_webserver)
         .run();
+}
+
+fn init_database(tokio_runtime_resource: Res<TokioRuntimeResource<TokioServerMessage>>) {
+    let tx = tokio_runtime_resource.sender.clone();
+    tokio_runtime_resource.runtime.spawn(async move {
+        const DB_URL: &str = "sqlite://sqlite.db";
+        if !Sqlite::database_exists(DB_URL).await.unwrap_or(false) {
+            println!("Creating database {}", DB_URL);
+            match Sqlite::create_database(DB_URL).await {
+                Ok(_) => println!("Create db success"),
+                Err(error) => panic!("error: {}", error),
+            }
+        } else {
+            println!("Database already exists");
+        }
+
+        let db = SqlitePool::connect(DB_URL).await.unwrap();
+        let result = sqlx::query("CREATE TABLE IF NOT EXISTS users (id UUID UNIQUE NOT NULL, last_ping TIMESTAMPZ NOT NULL);").execute(&db).await.unwrap();
+        println!("Create user table result: {:?}", result);
+
+        tx.send(TokioServerMessage::InitializePool(db))
+            .await
+            .unwrap();
+    });
 }
 
 fn start_listening(server_args: Res<ServerArgs>, mut server: ResMut<QuinnetServer>) {
@@ -100,6 +133,8 @@ fn start_listening(server_args: Res<ServerArgs>, mut server: ResMut<QuinnetServe
 fn handle_client_messages(
     mut connection_resource: ResMut<ConnectionResource>,
     mut server: ResMut<QuinnetServer>,
+    database_resource: Res<DatabaseResource>,
+    tokio_runtime_resource: Res<TokioRuntimeResource<TokioServerMessage>>,
 ) {
     let endpoint = server.endpoint_mut();
     for client_id in endpoint.clients() {
@@ -108,6 +143,16 @@ fn handle_client_messages(
         {
             match message {
                 ClientMessage::Join { user_id } => {
+                    if let Some(db) = &database_resource.pool {
+                        let db = db.clone();
+                        tokio_runtime_resource.runtime.spawn(async move {
+                            sqlx::query("INSERT INTO users (id, last_ping) VALUES ($1, now());")
+                                .bind(user_id)
+                                .fetch_all(&db)
+                                .await
+                                .unwrap();
+                        });
+                    }
                     endpoint
                         .broadcast_message(ServerMessage::ClientConnected { client_id, user_id })
                         .unwrap();
@@ -146,11 +191,13 @@ fn handle_client_messages(
 fn tokio_receiver_system(
     mut connection_resource: ResMut<ConnectionResource>,
     mut tokio_runtime_resource: ResMut<TokioRuntimeResource<TokioServerMessage>>,
+    mut database_resource: ResMut<DatabaseResource>,
 ) {
     if let Ok(message) = tokio_runtime_resource.receiver.try_recv() {
         match message {
             TokioServerMessage::RegisterServer(server) => connection_resource.server = Some(server),
             TokioServerMessage::PingServer(server) => connection_resource.server = Some(server),
+            TokioServerMessage::InitializePool(pool) => database_resource.pool = Some(pool),
         }
     }
 }
