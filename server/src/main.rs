@@ -11,7 +11,7 @@ use clap::{arg, Parser};
 use engine::{
     api_client::{ping_server, register_server},
     models::api::{GameServer, RegisterGameServer},
-    network::ClientMessage,
+    network::{ClientMessage, ServerMessage},
     resources::TokioRuntimeResource,
 };
 use std::{
@@ -99,30 +99,29 @@ fn start_listening(server_args: Res<ServerArgs>, mut server: ResMut<QuinnetServe
 fn handle_client_messages(
     mut connection_resource: ResMut<ConnectionResource>,
     mut server: ResMut<QuinnetServer>,
-    /*...*/
 ) {
-    let mut endpoint = server.endpoint_mut();
+    let endpoint = server.endpoint_mut();
     for client_id in endpoint.clients() {
-        while let Some((client_id, message)) =
+        while let Some((_channel_id, message)) =
             endpoint.try_receive_message_from::<ClientMessage>(client_id)
         {
-            println!("ClientMessage: {:?}", message);
             match message {
-                // Match on your own message types ...
                 ClientMessage::Join { username } => {
-                    connection_resource.users.insert(client_id.into(), username);
-                    // Send a messsage to 1 client
-                    // endpoint
-                    //     .send_message(client_id, ServerMessage::InitClient {/*...*/})
-                    //     .unwrap();
-                    /*...*/
+                    endpoint
+                        .broadcast_message(ServerMessage::ClientConnected {
+                            client_id: client_id.clone(),
+                            username: username.clone(),
+                        })
+                        .unwrap();
+                    connection_resource.users.insert(client_id, username);
                 }
                 ClientMessage::Disconnect {} => {
-                    // Disconnect a client
-                    let id: u64 = client_id.into();
-                    endpoint.disconnect_client(id);
-                    connection_resource.users.remove(&id);
-                    /*...*/
+                    connection_resource.users.remove(&client_id);
+                    endpoint
+                        .broadcast_message(ServerMessage::ClientDisconnected { client_id })
+                        .unwrap();
+
+                    endpoint.disconnect_client(client_id).unwrap();
                 }
                 ClientMessage::ChatMessage { message } => {
                     // Send a message to a group of clients

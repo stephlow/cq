@@ -9,7 +9,7 @@ use bevy_quinnet::{
         connection::{ClientEndpointConfiguration, ConnectionEvent},
         QuinnetClient, QuinnetClientPlugin,
     },
-    shared::channels::ChannelsConfiguration,
+    shared::{channels::ChannelsConfiguration, ClientId},
 };
 use clap::Parser;
 use engine::{
@@ -18,7 +18,10 @@ use engine::{
     network::{ClientMessage, ServerMessage},
     resources::TokioRuntimeResource,
 };
-use std::net::{IpAddr, Ipv4Addr};
+use std::{
+    collections::HashMap,
+    net::{IpAddr, Ipv4Addr},
+};
 use tokio::sync::mpsc::channel;
 use uuid::Uuid;
 
@@ -56,6 +59,12 @@ struct ServerBrowser {
     servers: Option<Vec<GameServer>>,
 }
 
+#[derive(Default, Resource)]
+struct ServerInfo {
+    id: Option<Uuid>,
+    connected: HashMap<ClientId, String>,
+}
+
 fn main() {
     let args = ClientArgs::parse();
     let (tx, rx) = channel::<TokioClientMessage>(10);
@@ -66,7 +75,6 @@ fn main() {
         .add_plugins(QuinnetClientPlugin::default())
         .init_state::<ConnectionState>()
         .add_systems(Update, connection_event_handler)
-        // .add_systems(Startup, start_connection)
         .add_systems(
             Update,
             handle_server_messages.run_if(in_state(ConnectionState::Connected)),
@@ -76,6 +84,7 @@ fn main() {
         .insert_resource(UsernameInputState::default())
         .insert_resource(TokioRuntimeResource::new(tx, rx))
         .insert_resource(ServerBrowser::default())
+        .insert_resource(ServerInfo::default())
         .add_systems(Update, tokio_receiver_system)
         .add_systems(Startup, load_servers)
         .add_systems(
@@ -108,38 +117,20 @@ fn connection_event_handler(
     }
 }
 
-// fn start_connection(mut client: ResMut<QuinnetClient>) {
-//     client
-//         .open_connection(
-//             ClientEndpointConfiguration::from_ips(
-//                 IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-//                 6000,
-//                 IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
-//                 0,
-//             ),
-//             CertificateVerificationMode::SkipVerification,
-//             ChannelsConfiguration::default(),
-//         )
-//         .unwrap();
-//
-//     // When trully connected, you will receive a ConnectionEvent
-// }
-
-fn handle_server_messages(
-    mut client: ResMut<QuinnetClient>,
-    /*...*/
-) {
-    while let Ok(Some((client_id, message))) =
+fn handle_server_messages(mut client: ResMut<QuinnetClient>, mut server_info: ResMut<ServerInfo>) {
+    while let Ok(Some((_channel_id, message))) =
         client.connection_mut().receive_message::<ServerMessage>()
     {
-        println!("ServerMessage: {:?}", message);
         match message {
-            // Match on your own message types ...
             ServerMessage::ClientConnected {
                 client_id,
                 username,
-            } => { /*...*/ }
-            ServerMessage::ClientDisconnected { client_id } => { /*...*/ }
+            } => {
+                server_info.connected.insert(client_id, username);
+            }
+            ServerMessage::ClientDisconnected { client_id } => {
+                server_info.connected.remove(&client_id);
+            }
             ServerMessage::ChatMessage { client_id, message } => { /*...*/ }
         }
     }
@@ -176,11 +167,19 @@ fn load_servers(
     });
 }
 
-fn server_ui_system(mut contexts: EguiContexts, mut client_event_writer: EventWriter<ClientEvent>) {
+fn server_ui_system(
+    mut contexts: EguiContexts,
+    mut client_event_writer: EventWriter<ClientEvent>,
+    server_info: Res<ServerInfo>,
+) {
     egui::Window::new("Server").show(contexts.ctx_mut(), |ui| {
         ui.label("Connected");
         if ui.button("Disconnect").clicked() {
             client_event_writer.send(ClientEvent::Disconnect);
+        }
+        ui.label("Connected users:");
+        for (_client_id, username) in server_info.connected.iter() {
+            ui.label(username);
         }
     });
 }
@@ -214,19 +213,19 @@ fn event_system(
     mut client_event_reader: EventReader<ClientEvent>,
     mut client: ResMut<QuinnetClient>,
     mut next_connection_state: ResMut<NextState<ConnectionState>>,
+    mut server_info: ResMut<ServerInfo>,
+    username_input_state: Res<UsernameInputState>,
 ) {
     for event in client_event_reader.read() {
         match event {
             ClientEvent::Connect(id) => {
                 if let Some(servers) = &server_browser_resource.servers {
                     if let Some(server) = servers.iter().find(|server| &server.id == id) {
-                        client
+                        let client_id = client
                             .open_connection(
                                 ClientEndpointConfiguration::from_ips(
                                     server.addr,
-                                    // IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
                                     server.port,
-                                    // 6000,
                                     IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
                                     0,
                                 ),
@@ -234,10 +233,18 @@ fn event_system(
                                 ChannelsConfiguration::default(),
                             )
                             .unwrap();
+                        server_info.id = Some(id.clone());
+                        server_info
+                            .connected
+                            .insert(client_id, username_input_state.text.clone());
                     }
                 }
             }
             ClientEvent::Disconnect => {
+                if let Some(client_id) = client.connection().client_id() {
+                    server_info.connected.remove(&client_id);
+                }
+
                 client
                     .connection()
                     .send_message(ClientMessage::Disconnect)
