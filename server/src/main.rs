@@ -1,4 +1,3 @@
-use axum::{response::IntoResponse, routing::get, Router};
 use bevy::{app::ScheduleRunnerPlugin, log::tracing_subscriber, prelude::*, utils::HashMap};
 use bevy_quinnet::{
     server::{
@@ -14,6 +13,7 @@ use engine::{
     network::{ClientMessage, ServerMessage},
     resources::TokioRuntimeResource,
 };
+use plugins::webserver::WebServerPlugin;
 use sqlx::{migrate::MigrateDatabase, query, query_as, Pool, Sqlite, SqlitePool};
 use std::{
     net::{IpAddr, Ipv4Addr},
@@ -22,6 +22,24 @@ use std::{
 use time::OffsetDateTime;
 use tokio::sync::mpsc::channel;
 use uuid::Uuid;
+
+mod plugins;
+
+#[derive(serde::Serialize, sqlx::FromRow)]
+struct MessageRow {
+    user_id: Uuid,
+    content: String,
+    #[serde(with = "time::serde::rfc3339")]
+    sent_at: OffsetDateTime,
+}
+
+#[derive(serde::Serialize, sqlx::FromRow)]
+struct UserRow {
+    client_id: i32,
+    user_id: Uuid,
+    #[serde(with = "time::serde::rfc3339")]
+    last_ping: OffsetDateTime,
+}
 
 #[derive(Parser, Debug, Resource)]
 #[command(version, about, long_about = None)]
@@ -69,11 +87,6 @@ impl Default for ConnectionResource {
 }
 
 #[derive(Default, Resource)]
-struct WebServerResource {
-    started: bool,
-}
-
-#[derive(Default, Resource)]
 struct DatabaseResource {
     pool: Option<Pool<Sqlite>>,
 }
@@ -84,6 +97,8 @@ fn main() {
         .init();
 
     let args = ServerArgs::parse();
+    let web_port = args.web_port.clone();
+
     let (tx, rx) = channel::<TokioServerMessage>(10);
 
     App::new()
@@ -93,7 +108,6 @@ fn main() {
             ))),
         )
         .insert_resource(args)
-        .insert_resource(WebServerResource::default())
         .add_plugins(QuinnetServerPlugin::default())
         .add_systems(Startup, start_listening)
         .add_systems(Update, handle_client_messages)
@@ -104,7 +118,7 @@ fn main() {
         .add_systems(Startup, init_database)
         .add_systems(Startup, register_server_system)
         .add_systems(Update, ping_server_system)
-        .add_systems(Update, start_webserver)
+        .add_plugins(WebServerPlugin::new(web_port))
         .run();
 }
 
@@ -312,76 +326,4 @@ fn ping_server_system(
             connection_resource.last_ping_attempt = OffsetDateTime::now_utc();
         }
     }
-}
-
-#[derive(Clone)]
-struct ApiState {
-    pub pool: Option<Pool<Sqlite>>,
-}
-
-fn start_webserver(
-    server_args: Res<ServerArgs>,
-    tokio_runtime_resource: Res<TokioRuntimeResource<TokioServerMessage>>,
-    database_resource: Res<DatabaseResource>,
-    mut web_resource: ResMut<WebServerResource>,
-) {
-    if database_resource.pool.is_some() && !web_resource.started {
-        web_resource.started = true;
-        let web_port = server_args.web_port;
-        let api_state = ApiState {
-            pool: database_resource.pool.clone(),
-        };
-
-        tokio_runtime_resource.runtime.spawn(async move {
-            let app = Router::new()
-                .route("/messages", get(get_messages))
-                .route("/users", get(get_users))
-                .with_state(api_state);
-
-            let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", web_port))
-                .await
-                .unwrap();
-            axum::serve(listener, app).await
-        });
-    }
-}
-
-#[derive(serde::Serialize, sqlx::FromRow)]
-struct MessageRow {
-    user_id: Uuid,
-    content: String,
-    #[serde(with = "time::serde::rfc3339")]
-    sent_at: OffsetDateTime,
-}
-
-#[axum::debug_handler]
-async fn get_messages(
-    axum::extract::State(api_state): axum::extract::State<ApiState>,
-) -> impl IntoResponse {
-    let messages: Vec<MessageRow> = query_as("SELECT * FROM messages;")
-        .fetch_all(&api_state.pool.unwrap())
-        .await
-        .unwrap();
-
-    axum::Json(messages)
-}
-
-#[derive(serde::Serialize, sqlx::FromRow)]
-struct UserRow {
-    client_id: i32,
-    user_id: Uuid,
-    #[serde(with = "time::serde::rfc3339")]
-    last_ping: OffsetDateTime,
-}
-
-#[axum::debug_handler]
-async fn get_users(
-    axum::extract::State(api_state): axum::extract::State<ApiState>,
-) -> impl IntoResponse {
-    let users: Vec<UserRow> = query_as("SELECT * FROM users;")
-        .fetch_all(&api_state.pool.unwrap())
-        .await
-        .unwrap();
-
-    axum::Json(users)
 }
