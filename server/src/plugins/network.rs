@@ -1,4 +1,3 @@
-use super::database::{models::UserRow, SqliteServer};
 use crate::{ServerArgs, ServerStateResource, TokioServerMessage};
 use bevy::prelude::*;
 use bevy_quinnet::{
@@ -14,7 +13,6 @@ use engine::{
     network::{ClientMessage, ServerMessage},
     resources::TokioRuntimeResource,
 };
-use sqlx::{query, query_as};
 use std::net::{IpAddr, Ipv4Addr};
 use time::{Duration, OffsetDateTime};
 
@@ -77,8 +75,6 @@ fn start_listening(server_config: Res<ServerConfig>, mut server: ResMut<QuinnetS
 
 fn handle_client_messages(
     mut server: ResMut<QuinnetServer>,
-    sqlite_server: Res<SqliteServer>,
-    tokio_runtime_resource: Res<TokioRuntimeResource<TokioServerMessage>>,
     server_state_resource: Res<ServerStateResource>,
 ) {
     let endpoint = server.endpoint_mut();
@@ -91,20 +87,6 @@ fn handle_client_messages(
                     let mut server_state = server_state_resource.0.lock().unwrap();
                     server_state.connections.insert(client_id, user_id);
 
-                    if let Some(db) = &sqlite_server.pool {
-                        let db = db.clone();
-                        // TODO:
-                        let db_client_id: i32 =
-                            client_id.try_into().expect("error converting client_id");
-                        tokio_runtime_resource.runtime.spawn(async move {
-                            query("INSERT INTO users (client_id, user_id, last_ping) VALUES ($1, $2, datetime('now')) RETURNING *;")
-                            .bind(db_client_id)
-                            .bind(user_id)
-                            .fetch_one(&db)
-                            .await
-                            .unwrap();
-                        });
-                    }
                     endpoint
                         .broadcast_message(ServerMessage::ClientConnected { client_id, user_id })
                         .unwrap();
@@ -125,18 +107,6 @@ fn handle_client_messages(
                     let mut server_state = server_state_resource.0.lock().unwrap();
                     server_state.connections.remove(&client_id);
 
-                    if let Some(db) = &sqlite_server.pool {
-                        let db = db.clone();
-                        // TODO:
-                        let db_client_id: i32 =
-                            client_id.try_into().expect("error converting client_id");
-                        tokio_runtime_resource.runtime.spawn(async move {
-                            query("DELETE FROM users WHERE client_id = $1;")
-                                .bind(db_client_id)
-                                .execute(&db)
-                                .await
-                        });
-                    }
                     endpoint
                         .broadcast_message(ServerMessage::ClientDisconnected { client_id })
                         .unwrap();
@@ -144,24 +114,6 @@ fn handle_client_messages(
                     endpoint.disconnect_client(client_id).unwrap();
                 }
                 ClientMessage::ChatMessage { message } => {
-                    if let Some(db) = &sqlite_server.pool {
-                        let db = db.clone();
-                        // TODO:
-                        let db_client_id: i32 =
-                            client_id.try_into().expect("error converting client_id");
-
-                        let message = message.clone();
-                        tokio_runtime_resource.runtime.spawn(async move {
-                            let user: UserRow = query_as("SELECT * FROM users WHERE client_id = $1").bind(db_client_id).fetch_one(&db).await.unwrap();
-
-                            query("INSERT INTO messages (user_id, content) VALUES ($1, $2) RETURNING *;")
-                            .bind(user.user_id)
-                            .bind(message)
-                            .fetch_one(&db)
-                            .await
-                            .unwrap();
-                        });
-                    }
                     endpoint
                         .broadcast_message(ServerMessage::ChatMessage { client_id, message })
                         .unwrap();

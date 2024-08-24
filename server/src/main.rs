@@ -4,13 +4,8 @@ use bevy::{app::ScheduleRunnerPlugin, log::tracing_subscriber, prelude::*};
 use bevy_quinnet::shared::ClientId;
 use clap::{arg, Parser};
 use engine::{models::api::servers::Server, resources::TokioRuntimeResource};
-use plugins::{
-    database::{DatabasePlugin, SqliteServer},
-    network::{ConnectionResource, NetworkPlugin},
-    // webserver::WebServerPlugin,
-};
+use plugins::network::{ConnectionResource, NetworkPlugin};
 use serde::Serialize;
-use sqlx::{Pool, Sqlite};
 use std::{
     collections::HashMap,
     net::IpAddr,
@@ -44,7 +39,6 @@ struct ServerArgs {
 }
 
 enum TokioServerMessage {
-    InitializePool(Pool<Sqlite>),
     PingServer(Server),
     RegisterServer(Server),
 }
@@ -82,9 +76,7 @@ async fn main() -> Result<()> {
             .insert_resource(args)
             .insert_resource(TokioRuntimeResource::<TokioServerMessage>::new())
             .add_systems(Update, tokio_receiver_system)
-            .add_plugins(DatabasePlugin)
             .add_plugins(NetworkPlugin::new(port))
-            // .add_plugins(WebServerPlugin::new(web_port))
             .run();
     });
 
@@ -113,13 +105,11 @@ async fn get_root(Extension(server_state): Extension<ArcMutexServerState>) -> Js
 fn tokio_receiver_system(
     mut connection_resource: ResMut<ConnectionResource>,
     mut tokio_runtime_resource: ResMut<TokioRuntimeResource<TokioServerMessage>>,
-    mut sqlite_server: ResMut<SqliteServer>,
 ) {
     if let Ok(message) = tokio_runtime_resource.receiver.try_recv() {
         match message {
             TokioServerMessage::RegisterServer(server) => connection_resource.server = Some(server),
             TokioServerMessage::PingServer(server) => connection_resource.server = Some(server),
-            TokioServerMessage::InitializePool(pool) => sqlite_server.pool = Some(pool),
         }
     }
 }
