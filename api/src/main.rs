@@ -4,15 +4,13 @@ use axum::{
 };
 use clap::Parser;
 use dotenvy::dotenv;
-use engine::models::api::servers::Server;
 use handlers::{
     auth::{authenticate, profile},
     servers::{list_servers, ping_server, register_server},
     users::register_user,
 };
 use sqlx::postgres::PgPoolOptions;
-use std::{env, net::SocketAddr, sync::Arc};
-use tokio::sync::RwLock;
+use std::{env, net::SocketAddr};
 use tower_http::trace::TraceLayer;
 
 mod handlers;
@@ -23,13 +21,6 @@ struct ApiArgs {
     /// The port to run the server on
     #[arg(short, long, default_value = "3000")]
     port: u16,
-}
-
-type SharedState = Arc<RwLock<ApiState>>;
-
-#[derive(Default, Clone)]
-struct ApiState {
-    servers: Vec<Server>,
 }
 
 #[tokio::main]
@@ -50,15 +41,12 @@ async fn main() {
 
     let args = ApiArgs::parse();
 
-    let state = SharedState::default();
-
     let app = Router::new()
         .route("/auth", get(profile).post(authenticate))
         .route("/servers", get(list_servers).post(register_server))
         .route("/servers/:id/ping", post(ping_server))
         .route("/users", post(register_user))
         .layer(Extension(pool))
-        .layer(Extension(state))
         .layer(TraceLayer::new_for_http());
 
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", args.port))
