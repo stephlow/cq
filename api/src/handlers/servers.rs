@@ -3,7 +3,7 @@ use axum::{
     response::IntoResponse,
     Extension, Json,
 };
-use engine::models::api::{GameServer, RegisterGameServer};
+use engine::models::api::servers::{RegisterServer, Server};
 use std::net::SocketAddr;
 use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
@@ -15,7 +15,7 @@ pub async fn list_servers(Extension(state): Extension<SharedState>) -> impl Into
     let state = state.read().await;
 
     // TODO: Do a proper cleanup
-    let servers: Vec<GameServer> = state
+    let servers: Vec<Server> = state
         .servers
         .iter()
         .filter(|server| {
@@ -34,11 +34,11 @@ pub async fn register_server(
     Extension(state): Extension<SharedState>,
     // TODO: Verify addr
     ConnectInfo(_addr): ConnectInfo<SocketAddr>,
-    Json(payload): Json<RegisterGameServer>,
+    Json(payload): Json<RegisterServer>,
 ) -> impl IntoResponse {
     let mut state = state.write().await;
 
-    let server = GameServer::new(payload.addr, payload.port, payload.name);
+    let server = Server::new(payload.addr, payload.port, payload.name);
 
     state.servers.push(server.clone());
 

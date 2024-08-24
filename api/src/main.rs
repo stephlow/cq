@@ -3,7 +3,7 @@ use axum::{
     Extension, Router,
 };
 use clap::Parser;
-use engine::models::api::GameServer;
+use engine::models::api::servers::Server;
 use handlers::{
     auth::{authenticate, profile},
     servers::{list_servers, ping_server, register_server},
@@ -26,7 +26,7 @@ type SharedState = Arc<RwLock<ApiState>>;
 
 #[derive(Default, Clone)]
 struct ApiState {
-    servers: Vec<GameServer>,
+    servers: Vec<Server>,
 }
 
 #[tokio::main]

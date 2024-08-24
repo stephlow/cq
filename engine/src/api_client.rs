@@ -1,7 +1,8 @@
 use crate::models::api::{
     auth::{AuthResponse, Credentials},
+    servers::RegisterServer,
+    servers::Server,
     users::User,
-    GameServer, RegisterGameServer,
 };
 use anyhow::Result;
 use once_cell::sync::Lazy;
@@ -40,39 +41,36 @@ pub async fn get_profile(api_base_url: &str, token: &str) -> Result<User> {
     Ok(user)
 }
 
-pub async fn list_servers(api_base_url: &str) -> Result<Vec<GameServer>> {
+pub async fn list_servers(api_base_url: &str) -> Result<Vec<Server>> {
     let response = CLIENT
         .request(Method::GET, format!("{api_base_url}/servers"))
         .send()
         .await?;
 
-    let servers = response.json::<Vec<GameServer>>().await.unwrap();
+    let servers = response.json::<Vec<Server>>().await.unwrap();
 
     Ok(servers)
 }
 
-pub async fn register_server(
-    api_base_url: &str,
-    new_server: &RegisterGameServer,
-) -> Result<GameServer> {
+pub async fn register_server(api_base_url: &str, new_server: &RegisterServer) -> Result<Server> {
     let response = CLIENT
         .request(Method::POST, format!("{api_base_url}/servers"))
         .json(new_server)
         .send()
         .await?;
 
-    let server = response.json::<GameServer>().await?;
+    let server = response.json::<Server>().await?;
 
     Ok(server)
 }
 
-pub async fn ping_server(api_base_url: &str, id: &Uuid) -> Result<GameServer> {
+pub async fn ping_server(api_base_url: &str, id: &Uuid) -> Result<Server> {
     let response = CLIENT
         .request(Method::POST, format!("{api_base_url}/servers/{id}/ping"))
         .send()
         .await?;
 
-    let server = response.json::<GameServer>().await?;
+    let server = response.json::<Server>().await?;
 
     Ok(server)
 }

@@ -10,7 +10,7 @@ use bevy_quinnet::{
 use clap::{arg, Parser};
 use engine::{
     api_client::{ping_server, register_server},
-    models::api::{GameServer, RegisterGameServer},
+    models::api::servers::{RegisterServer, Server},
     network::{ClientMessage, ServerMessage},
     resources::TokioRuntimeResource,
 };
@@ -45,14 +45,14 @@ struct ServerArgs {
 }
 
 enum TokioServerMessage {
-    RegisterServer(GameServer),
-    PingServer(GameServer),
+    RegisterServer(Server),
+    PingServer(Server),
 }
 
 #[derive(Default, Resource)]
 struct ConnectionResource {
     users: HashMap<ClientId, Uuid>,
-    server: Option<GameServer>,
+    server: Option<Server>,
 }
 
 fn main() {
@@ -166,7 +166,7 @@ fn register_server_system(
     let name = server_args.name.clone();
 
     tokio_runtime_resource.runtime.spawn(async move {
-        let result = register_server(&api_base_url, &RegisterGameServer { addr, port, name }).await;
+        let result = register_server(&api_base_url, &RegisterServer { addr, port, name }).await;
 
         match result {
             Ok(server) => tx

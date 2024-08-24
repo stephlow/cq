@@ -14,7 +14,7 @@ use bevy_quinnet::{
 use clap::Parser;
 use engine::{
     api_client::{self, list_servers},
-    models::api::{auth::Credentials, users::User, GameServer},
+    models::api::{auth::Credentials, servers::Server, users::User},
     network::{ClientMessage, ServerMessage},
     resources::TokioRuntimeResource,
 };
@@ -71,12 +71,12 @@ enum ClientEvent {
 
 enum TokioClientMessage {
     Authenticated { token: String, user: User },
-    LoadServers(Vec<GameServer>),
+    LoadServers(Vec<Server>),
 }
 
 #[derive(Default, Resource)]
 struct ServerBrowser {
-    servers: Option<Vec<GameServer>>,
+    servers: Option<Vec<Server>>,
 }
 
 #[derive(Default, Resource)]
