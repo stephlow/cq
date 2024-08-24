@@ -1,11 +1,11 @@
 use axum::{response::IntoResponse, routing::get, Router};
-use bevy::{app::ScheduleRunnerPlugin, log::tracing_subscriber, prelude::*};
+use bevy::{app::ScheduleRunnerPlugin, log::tracing_subscriber, prelude::*, utils::HashMap};
 use bevy_quinnet::{
     server::{
         certificate::CertificateRetrievalMode, QuinnetServer, QuinnetServerPlugin,
         ServerEndpointConfiguration,
     },
-    shared::channels::ChannelsConfiguration,
+    shared::{channels::ChannelsConfiguration, ClientId},
 };
 use clap::{arg, Parser};
 use engine::{
@@ -50,6 +50,7 @@ enum TokioServerMessage {
 
 #[derive(Default, Resource)]
 struct ConnectionResource {
+    users: HashMap<ClientId, String>,
     server: Option<GameServer>,
 }
 
@@ -96,6 +97,7 @@ fn start_listening(server_args: Res<ServerArgs>, mut server: ResMut<QuinnetServe
 }
 
 fn handle_client_messages(
+    mut connection_resource: ResMut<ConnectionResource>,
     mut server: ResMut<QuinnetServer>,
     /*...*/
 ) {
@@ -108,6 +110,7 @@ fn handle_client_messages(
             match message {
                 // Match on your own message types ...
                 ClientMessage::Join { username } => {
+                    connection_resource.users.insert(client_id.into(), username);
                     // Send a messsage to 1 client
                     // endpoint
                     //     .send_message(client_id, ServerMessage::InitClient {/*...*/})
@@ -116,7 +119,9 @@ fn handle_client_messages(
                 }
                 ClientMessage::Disconnect {} => {
                     // Disconnect a client
-                    endpoint.disconnect_client(client_id.into());
+                    let id: u64 = client_id.into();
+                    endpoint.disconnect_client(id);
+                    connection_resource.users.remove(&id);
                     /*...*/
                 }
                 ClientMessage::ChatMessage { message } => {

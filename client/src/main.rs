@@ -29,6 +29,11 @@ struct ClientArgs {
     api_base_url: String,
 }
 
+#[derive(Default, Resource)]
+struct UsernameInputState {
+    text: String,
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default, States)]
 pub enum ConnectionState {
     Connected,
@@ -68,6 +73,7 @@ fn main() {
         )
         .add_event::<ClientEvent>()
         .insert_resource(args)
+        .insert_resource(UsernameInputState::default())
         .insert_resource(TokioRuntimeResource::new(tx, rx))
         .insert_resource(ServerBrowser::default())
         .add_systems(Update, tokio_receiver_system)
@@ -89,13 +95,14 @@ fn connection_event_handler(
     mut connection_event_reader: EventReader<ConnectionEvent>,
     mut next_connection_state: ResMut<NextState<ConnectionState>>,
     client: Res<QuinnetClient>,
+    username_input_state: Res<UsernameInputState>,
 ) {
     for _ in connection_event_reader.read() {
         next_connection_state.set(ConnectionState::Connected);
         client
             .connection()
             .send_message(ClientMessage::Join {
-                username: "Henk".to_string(),
+                username: username_input_state.text.clone(),
             })
             .unwrap();
     }
@@ -182,8 +189,12 @@ fn server_browser_ui_system(
     mut contexts: EguiContexts,
     server_browser_resource: Res<ServerBrowser>,
     mut client_event_writer: EventWriter<ClientEvent>,
+    mut username_input_state: ResMut<UsernameInputState>,
 ) {
     egui::Window::new("Servers").show(contexts.ctx_mut(), |ui| {
+        ui.label("Name:");
+        ui.text_edit_singleline(&mut username_input_state.text);
+
         if let Some(servers) = &server_browser_resource.servers {
             for server in servers.iter() {
                 ui.label(format!("Server name: {}:{}", server.name, server.port));
