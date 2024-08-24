@@ -15,10 +15,11 @@ pub async fn list_servers(
     let now = OffsetDateTime::now_utc();
     let timeout = Duration::minutes(30);
 
-    let servers: Vec<models::data::servers::Server> = query_as("SELECT * FROM servers;")
-        .fetch_all(&pool)
-        .await
-        .unwrap();
+    let servers: Vec<models::data::servers::Server> =
+        query_as("SELECT * FROM servers ORDER BY last_ping DESC;")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
 
     let servers = servers
         .into_iter()
@@ -60,7 +61,7 @@ pub async fn ping_server(
     ConnectInfo(_addr): ConnectInfo<SocketAddr>,
 ) -> Json<models::api::servers::Server> {
     let server: models::data::servers::Server =
-        query_as("UPDATE servers SET last_ping = now() WHERE id = $1")
+        query_as("UPDATE servers SET last_ping = now() WHERE id = $1 RETURNING *;")
             .bind(id)
             .fetch_one(&pool)
             .await

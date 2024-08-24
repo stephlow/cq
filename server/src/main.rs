@@ -51,10 +51,21 @@ enum TokioServerMessage {
     RegisterServer(Server),
 }
 
-#[derive(Default, Resource)]
+#[derive(Resource)]
 struct ConnectionResource {
     users: HashMap<ClientId, Uuid>,
     server: Option<Server>,
+    last_ping_attempt: OffsetDateTime,
+}
+
+impl Default for ConnectionResource {
+    fn default() -> Self {
+        Self {
+            users: HashMap::new(),
+            server: None,
+            last_ping_attempt: OffsetDateTime::now_utc(),
+        }
+    }
 }
 
 #[derive(Default, Resource)]
@@ -227,13 +238,16 @@ fn register_server_system(
 
 fn ping_server_system(
     server_args: Res<ServerArgs>,
-    connection_resource: Res<ConnectionResource>,
+    mut connection_resource: ResMut<ConnectionResource>,
     tokio_runtime_resource: Res<TokioRuntimeResource<TokioServerMessage>>,
 ) {
     if let Some(server) = &connection_resource.server {
         let now = OffsetDateTime::now_utc();
+        let timeout = Duration::from_secs(60);
 
-        if now - server.last_ping >= Duration::from_secs(10) {
+        if now - server.last_ping >= timeout
+            && now - connection_resource.last_ping_attempt >= timeout
+        {
             let tx = tokio_runtime_resource.sender.clone();
 
             let api_base_url = server_args.api_base_url.clone();
@@ -250,6 +264,8 @@ fn ping_server_system(
                     Err(error) => error!(error = ?error, "Ping"),
                 }
             });
+
+            connection_resource.last_ping_attempt = OffsetDateTime::now_utc();
         }
     }
 }
