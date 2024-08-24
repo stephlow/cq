@@ -14,7 +14,7 @@ use bevy_quinnet::{
 use clap::Parser;
 use engine::{
     api_client::{self, list_servers},
-    models::api::{auth::Credentials, GameServer},
+    models::api::{auth::Credentials, users::User, GameServer},
     network::{ClientMessage, ServerMessage},
     resources::TokioRuntimeResource,
 };
@@ -33,6 +33,18 @@ struct ClientArgs {
 }
 
 #[derive(Default, Resource)]
+struct AuthInfo {
+    token: Option<String>,
+    user: Option<User>,
+}
+
+#[derive(Default, Resource)]
+struct AuthInputState {
+    username: String,
+    password: String,
+}
+
+#[derive(Default, Resource)]
 struct UsernameInputState {
     text: String,
 }
@@ -40,6 +52,13 @@ struct UsernameInputState {
 #[derive(Default, Resource)]
 struct ChatInputState {
     text: String,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default, States)]
+pub enum AuthState {
+    Authenticated,
+    #[default]
+    Anonymous,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default, States)]
@@ -56,6 +75,7 @@ enum ClientEvent {
 }
 
 enum TokioClientMessage {
+    Authenticated { token: String, user: User },
     LoadServers(Vec<GameServer>),
 }
 
@@ -79,14 +99,19 @@ fn main() {
         .add_plugins(DefaultPlugins)
         .add_plugins(EguiPlugin)
         .add_plugins(QuinnetClientPlugin::default())
+        .init_state::<AuthState>()
         .init_state::<ConnectionState>()
         .add_systems(Update, connection_event_handler)
         .add_systems(
             Update,
-            handle_server_messages.run_if(in_state(ConnectionState::Connected)),
+            handle_server_messages
+                .run_if(in_state(AuthState::Authenticated))
+                .run_if(in_state(ConnectionState::Connected)),
         )
         .add_event::<ClientEvent>()
         .insert_resource(args)
+        .insert_resource(AuthInfo::default())
+        .insert_resource(AuthInputState::default())
         .insert_resource(UsernameInputState::default())
         .insert_resource(ChatInputState::default())
         .insert_resource(TokioRuntimeResource::new(tx, rx))
@@ -96,11 +121,19 @@ fn main() {
         .add_systems(Startup, load_servers)
         .add_systems(
             Update,
-            server_ui_system.run_if(in_state(ConnectionState::Connected)),
+            auth_ui_system.run_if(in_state(AuthState::Anonymous)),
         )
         .add_systems(
             Update,
-            server_browser_ui_system.run_if(in_state(ConnectionState::Disconnected)),
+            server_ui_system
+                .run_if(in_state(AuthState::Authenticated))
+                .run_if(in_state(ConnectionState::Connected)),
+        )
+        .add_systems(
+            Update,
+            server_browser_ui_system
+                .run_if(in_state(AuthState::Authenticated))
+                .run_if(in_state(ConnectionState::Disconnected)),
         )
         .add_systems(Update, event_system)
         .add_systems(Last, handle_disconnect)
@@ -148,11 +181,18 @@ fn handle_server_messages(mut client: ResMut<QuinnetClient>, mut server_info: Re
 fn tokio_receiver_system(
     mut server_browser_resource: ResMut<ServerBrowser>,
     mut tokio_runtime_resource: ResMut<TokioRuntimeResource<TokioClientMessage>>,
+    mut next_auth_state: ResMut<NextState<AuthState>>,
+    mut auth_info: ResMut<AuthInfo>,
 ) {
     if let Ok(message) = tokio_runtime_resource.receiver.try_recv() {
         match message {
+            TokioClientMessage::Authenticated { token, user } => {
+                auth_info.token = Some(token);
+                auth_info.user = Some(user);
+                next_auth_state.set(AuthState::Authenticated);
+            }
             TokioClientMessage::LoadServers(server) => {
-                server_browser_resource.servers = Some(server)
+                server_browser_resource.servers = Some(server);
             }
         }
     }
@@ -174,26 +214,44 @@ fn load_servers(
             Err(error) => error!(error = ?error, "Load servers"),
         }
     });
+}
 
-    let api_base_url = client_args.api_base_url.clone();
-    tokio.runtime.spawn(async move {
-        let auth_response = api_client::authenticate(
-            &api_base_url,
-            Credentials {
-                username: "1234".to_string(),
-                password: "1234".to_string(),
-            },
-        )
-        .await
-        .unwrap();
+fn auth_ui_system(
+    client_args: Res<ClientArgs>,
+    tokio: Res<TokioRuntimeResource<TokioClientMessage>>,
+    mut contexts: EguiContexts,
+    mut auth_input_state: ResMut<AuthInputState>,
+) {
+    egui::Window::new("Authenticate").show(contexts.ctx_mut(), |ui| {
+        ui.label("Username:");
+        ui.text_edit_singleline(&mut auth_input_state.username);
+        ui.label("Password:");
+        ui.text_edit_singleline(&mut auth_input_state.password);
 
-        println!("AUTH!");
+        if ui.button("Login").clicked() {
+            let username = auth_input_state.username.clone();
+            let password = auth_input_state.password.clone();
+            let tx = tokio.sender.clone();
 
-        let user = api_client::get_profile(&api_base_url, &auth_response.token)
-            .await
-            .unwrap();
+            let api_base_url = client_args.api_base_url.clone();
+            tokio.runtime.spawn(async move {
+                let auth_response =
+                    api_client::authenticate(&api_base_url, Credentials { username, password })
+                        .await
+                        .unwrap();
 
-        println!("USERID: {}", user.id);
+                let user = api_client::get_profile(&api_base_url, &auth_response.token)
+                    .await
+                    .unwrap();
+
+                tx.send(TokioClientMessage::Authenticated {
+                    token: auth_response.token,
+                    user,
+                })
+                .await
+                .unwrap();
+            });
+        }
     });
 }
 
@@ -245,8 +303,13 @@ fn server_browser_ui_system(
     server_browser_resource: Res<ServerBrowser>,
     mut client_event_writer: EventWriter<ClientEvent>,
     mut username_input_state: ResMut<UsernameInputState>,
+    auth_info: Res<AuthInfo>,
 ) {
     egui::Window::new("Servers").show(contexts.ctx_mut(), |ui| {
+        if let Some(user) = &auth_info.user {
+            ui.label(format!("user_id: {}", user.id));
+        }
+
         ui.label("Name:");
         ui.text_edit_singleline(&mut username_input_state.text);
 
