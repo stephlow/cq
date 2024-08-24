@@ -1,4 +1,4 @@
-use crate::{ServerArgs, ServerStateResource, TokioServerMessage};
+use crate::{AppState, ServerArgs, TokioServerMessage};
 use bevy::prelude::*;
 use bevy_quinnet::{
     server::{
@@ -73,10 +73,7 @@ fn start_listening(server_config: Res<ServerConfig>, mut server: ResMut<QuinnetS
         .unwrap();
 }
 
-fn handle_client_messages(
-    mut server: ResMut<QuinnetServer>,
-    server_state_resource: Res<ServerStateResource>,
-) {
+fn handle_client_messages(mut server: ResMut<QuinnetServer>, mut app_state: ResMut<AppState>) {
     let endpoint = server.endpoint_mut();
     for client_id in endpoint.clients() {
         while let Some((_channel_id, message)) =
@@ -84,14 +81,13 @@ fn handle_client_messages(
         {
             match message {
                 ClientMessage::Join { user_id } => {
-                    let mut server_state = server_state_resource.0.lock().unwrap();
-                    server_state.connections.insert(client_id, user_id);
+                    app_state.connections.insert(client_id, user_id);
 
                     endpoint
                         .broadcast_message(ServerMessage::ClientConnected { client_id, user_id })
                         .unwrap();
 
-                    for (user_client_id, user_id) in server_state.connections.iter() {
+                    for (user_client_id, user_id) in app_state.connections.iter() {
                         endpoint
                             .send_message(
                                 client_id,
@@ -104,8 +100,7 @@ fn handle_client_messages(
                     }
                 }
                 ClientMessage::Disconnect {} => {
-                    let mut server_state = server_state_resource.0.lock().unwrap();
-                    server_state.connections.remove(&client_id);
+                    app_state.connections.remove(&client_id);
 
                     endpoint
                         .broadcast_message(ServerMessage::ClientDisconnected { client_id })
