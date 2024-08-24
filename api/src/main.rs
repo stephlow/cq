@@ -1,16 +1,15 @@
 use axum::{
-    extract::{ConnectInfo, Path},
-    response::IntoResponse,
     routing::{get, post},
-    Extension, Json, Router,
+    Extension, Router,
 };
 use clap::Parser;
-use engine::models::api::{GameServer, RegisterGameServer};
+use engine::models::api::GameServer;
+use handlers::servers::{list_servers, ping_server, register_server};
 use std::{net::SocketAddr, sync::Arc};
-use time::{Duration, OffsetDateTime};
 use tokio::sync::RwLock;
 use tower_http::trace::TraceLayer;
-use uuid::Uuid;
+
+mod handlers;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -52,59 +51,4 @@ async fn main() {
     )
     .await
     .unwrap();
-}
-
-#[axum::debug_handler]
-async fn list_servers(Extension(state): Extension<SharedState>) -> impl IntoResponse {
-    let state = state.read().await;
-
-    // TODO: Do a proper cleanup
-    let servers: Vec<GameServer> = state
-        .servers
-        .iter()
-        .filter(|server| {
-            let now = OffsetDateTime::now_utc();
-
-            now - server.last_ping <= Duration::seconds(30)
-        })
-        .cloned()
-        .collect();
-
-    Json(servers)
-}
-
-#[axum::debug_handler]
-async fn register_server(
-    Extension(state): Extension<SharedState>,
-    // TODO: Verify addr
-    ConnectInfo(_addr): ConnectInfo<SocketAddr>,
-    Json(payload): Json<RegisterGameServer>,
-) -> impl IntoResponse {
-    let mut state = state.write().await;
-
-    let server = GameServer::new(payload.addr, payload.port, payload.name);
-
-    state.servers.push(server.clone());
-
-    Json(server)
-}
-
-#[axum::debug_handler]
-async fn ping_server(
-    Path(id): Path<Uuid>,
-    Extension(state): Extension<SharedState>,
-    // TODO: Verify addr
-    ConnectInfo(_addr): ConnectInfo<SocketAddr>,
-) -> impl IntoResponse {
-    let mut state = state.write().await;
-
-    let server = state
-        .servers
-        .iter_mut()
-        .find(|server| server.id == id)
-        .unwrap();
-
-    server.ping();
-
-    Json(server.clone())
 }
