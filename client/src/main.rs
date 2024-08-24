@@ -26,7 +26,6 @@ use std::{
     collections::HashMap,
     net::{IpAddr, Ipv4Addr},
 };
-use tokio::sync::mpsc::channel;
 use uuid::Uuid;
 
 #[derive(Parser, Debug, Resource)]
@@ -99,7 +98,6 @@ struct ServerInfo {
 
 fn main() {
     let args = ClientArgs::parse();
-    let (tx, rx) = channel::<TokioClientMessage>(10);
 
     App::new()
         .add_plugins(DefaultPlugins)
@@ -120,7 +118,7 @@ fn main() {
         .insert_resource(LoginInputState::default())
         .insert_resource(RegisterInputState::default())
         .insert_resource(ChatInputState::default())
-        .insert_resource(TokioRuntimeResource::new(tx, rx))
+        .insert_resource(TokioRuntimeResource::<TokioClientMessage>::new())
         .insert_resource(ServerBrowser::default())
         .insert_resource(ServerInfo::default())
         .add_systems(Update, tokio_receiver_system)

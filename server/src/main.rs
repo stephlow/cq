@@ -8,7 +8,6 @@ use plugins::{
 };
 use sqlx::{Pool, Sqlite};
 use std::{net::IpAddr, time::Duration};
-use tokio::sync::mpsc::channel;
 
 mod plugins;
 
@@ -49,8 +48,6 @@ fn main() {
     let port = args.port.clone();
     let web_port = args.web_port.clone();
 
-    let (tx, rx) = channel::<TokioServerMessage>(10);
-
     App::new()
         .add_plugins(
             MinimalPlugins.set(ScheduleRunnerPlugin::run_loop(Duration::from_secs_f64(
@@ -58,7 +55,7 @@ fn main() {
             ))),
         )
         .insert_resource(args)
-        .insert_resource(TokioRuntimeResource::new(tx, rx))
+        .insert_resource(TokioRuntimeResource::<TokioServerMessage>::new())
         .add_systems(Update, tokio_receiver_system)
         .add_plugins(DatabasePlugin)
         .add_plugins(NetworkPlugin::new(port))

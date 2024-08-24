@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use tokio::{
     runtime::Runtime,
-    sync::mpsc::{Receiver, Sender},
+    sync::mpsc::{channel, Receiver, Sender},
 };
 
 #[derive(Resource)]
@@ -12,7 +12,9 @@ pub struct TokioRuntimeResource<T> {
 }
 
 impl<T> TokioRuntimeResource<T> {
-    pub fn new(tx: Sender<T>, rx: Receiver<T>) -> Self {
+    pub fn new() -> Self {
+        let (tx, rx) = channel(100);
+
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()
