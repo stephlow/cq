@@ -315,29 +315,25 @@ fn event_system(
     mut client: ResMut<QuinnetClient>,
     mut next_connection_state: ResMut<NextState<ConnectionState>>,
     mut server_info: ResMut<ServerInfo>,
-    auth_info: Res<AuthInfo>,
 ) {
     for event in client_event_reader.read() {
         match event {
             ClientEvent::Connect(id) => {
                 if let Some(servers) = &server_browser_resource.servers {
                     if let Some(server) = servers.iter().find(|server| &server.id == id) {
-                        if let Some(user) = &auth_info.user {
-                            let client_id = client
-                                .open_connection(
-                                    ClientEndpointConfiguration::from_ips(
-                                        server.addr,
-                                        server.port,
-                                        IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
-                                        0,
-                                    ),
-                                    CertificateVerificationMode::SkipVerification,
-                                    ChannelsConfiguration::default(),
-                                )
-                                .unwrap();
-                            server_info.id = Some(*id);
-                            server_info.connected.insert(client_id, user.id);
-                        }
+                        client
+                            .open_connection(
+                                ClientEndpointConfiguration::from_ips(
+                                    server.addr,
+                                    server.port,
+                                    IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
+                                    0,
+                                ),
+                                CertificateVerificationMode::SkipVerification,
+                                ChannelsConfiguration::default(),
+                            )
+                            .unwrap();
+                        server_info.id = Some(*id);
                     }
                 }
             }

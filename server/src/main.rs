@@ -112,6 +112,18 @@ fn handle_client_messages(
                         .broadcast_message(ServerMessage::ClientConnected { client_id, user_id })
                         .unwrap();
                     connection_resource.users.insert(client_id, user_id);
+
+                    for (user_client_id, user_id) in connection_resource.users.iter() {
+                        endpoint
+                            .send_message(
+                                client_id,
+                                ServerMessage::ClientConnected {
+                                    client_id: user_client_id.clone(),
+                                    user_id: user_id.clone(),
+                                },
+                            )
+                            .unwrap();
+                    }
                 }
                 ClientMessage::Disconnect {} => {
                     connection_resource.users.remove(&client_id);
