@@ -10,7 +10,6 @@ pub struct SqliteServer {
     pub pool: Option<Pool<Sqlite>>,
 }
 
-#[derive(Default)]
 pub struct DatabasePlugin;
 
 impl Plugin for DatabasePlugin {
@@ -26,13 +25,11 @@ fn init_database(tokio_runtime_resource: Res<TokioRuntimeResource<TokioServerMes
         const DB_URL: &str = "sqlite://.server/server.db";
 
         if !Sqlite::database_exists(DB_URL).await.unwrap_or(false) {
-            println!("Creating database {}", DB_URL);
+            info!(database_url = DB_URL, "Creating database");
             match Sqlite::create_database(DB_URL).await {
-                Ok(_) => println!("Create db success"),
+                Ok(_) => info!("Database successfully created"),
                 Err(error) => panic!("error: {}", error),
             }
-        } else {
-            println!("Database already exists");
         }
 
         let pool = SqlitePool::connect(DB_URL).await.unwrap();
