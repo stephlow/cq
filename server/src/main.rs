@@ -334,7 +334,8 @@ fn start_webserver(
 
         tokio_runtime_resource.runtime.spawn(async move {
             let app = Router::new()
-                .route("/", get(get_root))
+                .route("/messages", get(get_messages))
+                .route("/users", get(get_users))
                 .with_state(api_state);
 
             let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", web_port))
@@ -346,14 +347,35 @@ fn start_webserver(
 }
 
 #[derive(serde::Serialize, sqlx::FromRow)]
+struct MessageRow {
+    user_id: Uuid,
+    content: String,
+    #[serde(with = "time::serde::rfc3339")]
+    sent_at: OffsetDateTime,
+}
+
+#[axum::debug_handler]
+async fn get_messages(
+    axum::extract::State(api_state): axum::extract::State<ApiState>,
+) -> impl IntoResponse {
+    let messages: Vec<MessageRow> = query_as("SELECT * FROM messages;")
+        .fetch_all(&api_state.pool.unwrap())
+        .await
+        .unwrap();
+
+    axum::Json(messages)
+}
+
+#[derive(serde::Serialize, sqlx::FromRow)]
 struct UserRow {
     client_id: i32,
     user_id: Uuid,
+    #[serde(with = "time::serde::rfc3339")]
     last_ping: OffsetDateTime,
 }
 
 #[axum::debug_handler]
-async fn get_root(
+async fn get_users(
     axum::extract::State(api_state): axum::extract::State<ApiState>,
 ) -> impl IntoResponse {
     let users: Vec<UserRow> = query_as("SELECT * FROM users;")
