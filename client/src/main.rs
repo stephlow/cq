@@ -232,7 +232,7 @@ fn auth_ui_system(
         ui.label("Password:");
         ui.text_edit_singleline(&mut login_input_state.password);
 
-        if ui.button("Register").clicked() {
+        if ui.button("Login").clicked() {
             let username = login_input_state.username.clone();
             let password = login_input_state.password.clone();
             let tx = tokio.sender.clone();
@@ -266,7 +266,7 @@ fn auth_ui_system(
         ui.label("Password:");
         ui.text_edit_singleline(&mut register_input_state.password);
 
-        if ui.button("Login").clicked() {
+        if ui.button("Register").clicked() {
             let username = register_input_state.username.clone();
             let email = register_input_state.email.clone();
             let password = register_input_state.password.clone();

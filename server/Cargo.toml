@@ -9,6 +9,7 @@ bevy = { workspace = true }
 bevy_quinnet = { workspace = true }
 clap = { workspace = true }
 engine = { path = "../engine" }
+serde = { workspace = true }
 sqlx = { workspace = true, features = ["sqlite", "runtime-tokio-native-tls"] }
 time = { workspace = true }
 tokio = { workspace = true }
