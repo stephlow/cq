@@ -1,11 +1,7 @@
 use anyhow::Result;
 use axum::{http::HeaderMap, Extension, Json};
-use bcrypt::verify;
 use engine::models;
-use josekit::{
-    jws::JwsHeader,
-    jwt::{self, JwtPayload},
-};
+use josekit::jwt::{self};
 use sqlx::{query_as, PgPool};
 use std::str::FromStr;
 use uuid::Uuid;
@@ -20,18 +16,8 @@ pub async fn authenticate(
         .await
         .unwrap();
 
-    let verified = verify(credentials.password, &user.password_hash).unwrap();
-
-    if verified {
-        let mut header = JwsHeader::new();
-        header.set_token_type("JWT");
-
-        let mut payload = JwtPayload::new();
-        payload.set_subject(user.id.to_string().as_str());
-
-        let token = jwt::encode_unsecured(&payload, &header).unwrap();
-
-        return Ok(Json(models::api::auth::AuthResponse { token }));
+    if user.verify_password(&credentials.password) {
+        return Ok(Json(models::api::auth::AuthResponse::from_user(user)));
     }
 
     Err(())
