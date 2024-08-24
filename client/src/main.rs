@@ -14,7 +14,11 @@ use bevy_quinnet::{
 use clap::Parser;
 use engine::{
     api_client::{self, list_servers},
-    models::api::{auth::Credentials, servers::Server, users::User},
+    models::api::{
+        auth::Credentials,
+        servers::Server,
+        users::{NewUser, User},
+    },
     network::{ClientMessage, ServerMessage},
     resources::TokioRuntimeResource,
 };
@@ -39,8 +43,15 @@ struct AuthInfo {
 }
 
 #[derive(Default, Resource)]
-struct AuthInputState {
+struct LoginInputState {
     username: String,
+    password: String,
+}
+
+#[derive(Default, Resource)]
+struct RegisterInputState {
+    username: String,
+    email: String,
     password: String,
 }
 
@@ -106,7 +117,8 @@ fn main() {
         .add_event::<ClientEvent>()
         .insert_resource(args)
         .insert_resource(AuthInfo::default())
-        .insert_resource(AuthInputState::default())
+        .insert_resource(LoginInputState::default())
+        .insert_resource(RegisterInputState::default())
         .insert_resource(ChatInputState::default())
         .insert_resource(TokioRuntimeResource::new(tx, rx))
         .insert_resource(ServerBrowser::default())
@@ -211,17 +223,18 @@ fn auth_ui_system(
     client_args: Res<ClientArgs>,
     tokio: Res<TokioRuntimeResource<TokioClientMessage>>,
     mut contexts: EguiContexts,
-    mut auth_input_state: ResMut<AuthInputState>,
+    mut login_input_state: ResMut<LoginInputState>,
+    mut register_input_state: ResMut<RegisterInputState>,
 ) {
-    egui::Window::new("Authenticate").show(contexts.ctx_mut(), |ui| {
+    egui::Window::new("Login").show(contexts.ctx_mut(), |ui| {
         ui.label("Username:");
-        ui.text_edit_singleline(&mut auth_input_state.username);
+        ui.text_edit_singleline(&mut login_input_state.username);
         ui.label("Password:");
-        ui.text_edit_singleline(&mut auth_input_state.password);
+        ui.text_edit_singleline(&mut login_input_state.password);
 
-        if ui.button("Login").clicked() {
-            let username = auth_input_state.username.clone();
-            let password = auth_input_state.password.clone();
+        if ui.button("Register").clicked() {
+            let username = login_input_state.username.clone();
+            let password = login_input_state.password.clone();
             let tx = tokio.sender.clone();
 
             let api_base_url = client_args.api_base_url.clone();
@@ -230,6 +243,47 @@ fn auth_ui_system(
                     api_client::authenticate(&api_base_url, Credentials { username, password })
                         .await
                         .unwrap();
+
+                let user = api_client::get_profile(&api_base_url, &auth_response.token)
+                    .await
+                    .unwrap();
+
+                tx.send(TokioClientMessage::Authenticated {
+                    token: auth_response.token,
+                    user,
+                })
+                .await
+                .unwrap();
+            });
+        }
+    });
+
+    egui::Window::new("Register").show(contexts.ctx_mut(), |ui| {
+        ui.label("Username:");
+        ui.text_edit_singleline(&mut register_input_state.username);
+        ui.label("Email:");
+        ui.text_edit_singleline(&mut register_input_state.email);
+        ui.label("Password:");
+        ui.text_edit_singleline(&mut register_input_state.password);
+
+        if ui.button("Login").clicked() {
+            let username = register_input_state.username.clone();
+            let email = register_input_state.email.clone();
+            let password = register_input_state.password.clone();
+            let tx = tokio.sender.clone();
+
+            let api_base_url = client_args.api_base_url.clone();
+            tokio.runtime.spawn(async move {
+                let auth_response = api_client::register_user(
+                    &api_base_url,
+                    NewUser {
+                        username,
+                        email,
+                        password,
+                    },
+                )
+                .await
+                .unwrap();
 
                 let user = api_client::get_profile(&api_base_url, &auth_response.token)
                     .await
