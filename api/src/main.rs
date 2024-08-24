@@ -3,12 +3,15 @@ use axum::{
     Extension, Router,
 };
 use clap::Parser;
+use dotenvy::dotenv;
 use engine::models::api::servers::Server;
 use handlers::{
     auth::{authenticate, profile},
     servers::{list_servers, ping_server, register_server},
+    users::register_user,
 };
-use std::{net::SocketAddr, sync::Arc};
+use sqlx::postgres::PgPoolOptions;
+use std::{env, net::SocketAddr, sync::Arc};
 use tokio::sync::RwLock;
 use tower_http::trace::TraceLayer;
 
@@ -31,9 +34,19 @@ struct ApiState {
 
 #[tokio::main]
 async fn main() {
+    dotenv().expect(".env file not found");
+
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::DEBUG)
         .init();
+
+    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL env variable is missing");
+
+    let pool = PgPoolOptions::new()
+        .max_connections(50)
+        .connect(&database_url)
+        .await
+        .expect("could not connect to database_url");
 
     let args = ApiArgs::parse();
 
@@ -43,6 +56,8 @@ async fn main() {
         .route("/auth", get(profile).post(authenticate))
         .route("/servers", get(list_servers).post(register_server))
         .route("/servers/:id/ping", post(ping_server))
+        .route("/users", post(register_user))
+        .layer(Extension(pool))
         .layer(Extension(state))
         .layer(TraceLayer::new_for_http());
 

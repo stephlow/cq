@@ -1,14 +1,14 @@
+use crate::SharedState;
 use axum::{
     extract::{ConnectInfo, Path},
     response::IntoResponse,
     Extension, Json,
 };
 use engine::models::api::servers::{RegisterServer, Server};
+use sqlx::{query_as, PgPool};
 use std::net::SocketAddr;
 use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
-
-use crate::SharedState;
 
 #[axum::debug_handler]
 pub async fn list_servers(Extension(state): Extension<SharedState>) -> impl IntoResponse {

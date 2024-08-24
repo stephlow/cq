@@ -7,10 +7,12 @@ edition = "2021"
 anyhow = { workspace = true }
 axum = { workspace = true }
 clap = { workspace = true }
+dotenvy = "0.15.7"
 engine = { path = "../engine" }
 josekit = "0.8.7"
 serde = { workspace = true }
 serde_json = { workspace = true }
+sqlx = { workspace = true, features = ["postgres", "runtime-tokio-native-tls"] }
 time = { workspace = true }
 tokio = { workspace = true }
 tower-http = { version = "0.5.2", features = ["trace"] }
