@@ -118,8 +118,8 @@ fn handle_client_messages(
                             .send_message(
                                 client_id,
                                 ServerMessage::ClientConnected {
-                                    client_id: user_client_id.clone(),
-                                    user_id: user_id.clone(),
+                                    client_id: *user_client_id,
+                                    user_id: *user_id,
                                 },
                             )
                             .unwrap();
