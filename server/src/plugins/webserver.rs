@@ -1,4 +1,4 @@
-use crate::{DatabaseResource, TokioServerMessage};
+use crate::{SqliteServer, TokioServerMessage};
 use app::create_app;
 use bevy::prelude::*;
 use engine::resources::TokioRuntimeResource;
@@ -40,11 +40,11 @@ impl Plugin for WebServerPlugin {
 fn start_webserver(
     mut webserver_resource: ResMut<WebServerResource>,
     tokio_runtime_resource: Res<TokioRuntimeResource<TokioServerMessage>>,
-    database_resource: Res<DatabaseResource>,
+    sqlite_server: Res<SqliteServer>,
 ) {
-    if database_resource.pool.is_some() && !webserver_resource.started {
+    if sqlite_server.pool.is_some() && !webserver_resource.started {
         let web_port = webserver_resource.port;
-        let pool = database_resource.pool.clone().unwrap();
+        let pool = sqlite_server.pool.clone().unwrap();
 
         tokio_runtime_resource.runtime.spawn(async move {
             let app = create_app(pool).await;

@@ -13,8 +13,11 @@ use engine::{
     network::{ClientMessage, ServerMessage},
     resources::TokioRuntimeResource,
 };
-use plugins::webserver::WebServerPlugin;
-use sqlx::{migrate::MigrateDatabase, query, query_as, Pool, Sqlite, SqlitePool};
+use plugins::{
+    database::{models::UserRow, DatabasePlugin, SqliteServer},
+    webserver::WebServerPlugin,
+};
+use sqlx::{query, query_as, Pool, Sqlite};
 use std::{
     net::{IpAddr, Ipv4Addr},
     time::Duration,
@@ -24,22 +27,6 @@ use tokio::sync::mpsc::channel;
 use uuid::Uuid;
 
 mod plugins;
-
-#[derive(serde::Serialize, sqlx::FromRow)]
-struct MessageRow {
-    user_id: Uuid,
-    content: String,
-    #[serde(with = "time::serde::rfc3339")]
-    sent_at: OffsetDateTime,
-}
-
-#[derive(serde::Serialize, sqlx::FromRow)]
-struct UserRow {
-    client_id: i32,
-    user_id: Uuid,
-    #[serde(with = "time::serde::rfc3339")]
-    last_ping: OffsetDateTime,
-}
 
 #[derive(Parser, Debug, Resource)]
 #[command(version, about, long_about = None)]
@@ -86,11 +73,6 @@ impl Default for ConnectionResource {
     }
 }
 
-#[derive(Default, Resource)]
-struct DatabaseResource {
-    pool: Option<Pool<Sqlite>>,
-}
-
 fn main() {
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::DEBUG)
@@ -109,45 +91,16 @@ fn main() {
         )
         .insert_resource(args)
         .add_plugins(QuinnetServerPlugin::default())
+        .add_plugins(DatabasePlugin::default())
         .add_systems(Startup, start_listening)
         .add_systems(Update, handle_client_messages)
         .insert_resource(ConnectionResource::default())
         .insert_resource(TokioRuntimeResource::new(tx, rx))
         .add_systems(Update, tokio_receiver_system)
-        .insert_resource(DatabaseResource::default())
-        .add_systems(Startup, init_database)
         .add_systems(Startup, register_server_system)
         .add_systems(Update, ping_server_system)
         .add_plugins(WebServerPlugin::new(web_port))
         .run();
-}
-
-fn init_database(tokio_runtime_resource: Res<TokioRuntimeResource<TokioServerMessage>>) {
-    let tx = tokio_runtime_resource.sender.clone();
-    tokio_runtime_resource.runtime.spawn(async move {
-        const DB_URL: &str = "sqlite://.server/server.db";
-
-        if !Sqlite::database_exists(DB_URL).await.unwrap_or(false) {
-            println!("Creating database {}", DB_URL);
-            match Sqlite::create_database(DB_URL).await {
-                Ok(_) => println!("Create db success"),
-                Err(error) => panic!("error: {}", error),
-            }
-        } else {
-            println!("Database already exists");
-        }
-
-        let db = SqlitePool::connect(DB_URL).await.unwrap();
-        let result = sqlx::query("CREATE TABLE IF NOT EXISTS users (client_id INTEGER NOT NULL, user_id UUID UNIQUE NOT NULL, last_ping DATETIME NOT NULL);").execute(&db).await.unwrap();
-        println!("Create users table result: {:?}", result);
-
-        let result = sqlx::query("CREATE TABLE IF NOT EXISTS messages (user_id UUID NOT NULL, content TEXT NOT NULL, sent_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL);").execute(&db).await.unwrap();
-        println!("Create messages table result: {:?}", result);
-
-        tx.send(TokioServerMessage::InitializePool(db))
-            .await
-            .unwrap();
-    });
 }
 
 fn start_listening(server_args: Res<ServerArgs>, mut server: ResMut<QuinnetServer>) {
@@ -168,7 +121,7 @@ fn start_listening(server_args: Res<ServerArgs>, mut server: ResMut<QuinnetServe
 fn handle_client_messages(
     mut connection_resource: ResMut<ConnectionResource>,
     mut server: ResMut<QuinnetServer>,
-    database_resource: Res<DatabaseResource>,
+    sqlite_server: Res<SqliteServer>,
     tokio_runtime_resource: Res<TokioRuntimeResource<TokioServerMessage>>,
 ) {
     let endpoint = server.endpoint_mut();
@@ -178,7 +131,7 @@ fn handle_client_messages(
         {
             match message {
                 ClientMessage::Join { user_id } => {
-                    if let Some(db) = &database_resource.pool {
+                    if let Some(db) = &sqlite_server.pool {
                         let db = db.clone();
                         // TODO:
                         let db_client_id: i32 =
@@ -210,7 +163,7 @@ fn handle_client_messages(
                     }
                 }
                 ClientMessage::Disconnect {} => {
-                    if let Some(db) = &database_resource.pool {
+                    if let Some(db) = &sqlite_server.pool {
                         let db = db.clone();
                         // TODO:
                         let db_client_id: i32 =
@@ -230,7 +183,7 @@ fn handle_client_messages(
                     endpoint.disconnect_client(client_id).unwrap();
                 }
                 ClientMessage::ChatMessage { message } => {
-                    if let Some(db) = &database_resource.pool {
+                    if let Some(db) = &sqlite_server.pool {
                         let db = db.clone();
                         // TODO:
                         let db_client_id: i32 =
@@ -260,7 +213,7 @@ fn handle_client_messages(
 fn tokio_receiver_system(
     mut connection_resource: ResMut<ConnectionResource>,
     mut tokio_runtime_resource: ResMut<TokioRuntimeResource<TokioServerMessage>>,
-    mut database_resource: ResMut<DatabaseResource>,
+    mut database_resource: ResMut<SqliteServer>,
 ) {
     if let Ok(message) = tokio_runtime_resource.receiver.try_recv() {
         match message {

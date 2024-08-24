@@ -1,4 +1,4 @@
-use crate::{MessageRow, UserRow};
+use crate::plugins::database::models::{MessageRow, UserRow};
 use axum::{extract::State, response::IntoResponse, routing::get, Json, Router};
 use sqlx::{query_as, Pool, Sqlite};
 
