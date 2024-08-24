@@ -45,11 +45,6 @@ struct AuthInputState {
 }
 
 #[derive(Default, Resource)]
-struct UsernameInputState {
-    text: String,
-}
-
-#[derive(Default, Resource)]
 struct ChatInputState {
     text: String,
 }
@@ -87,7 +82,7 @@ struct ServerBrowser {
 #[derive(Default, Resource)]
 struct ServerInfo {
     id: Option<Uuid>,
-    connected: HashMap<ClientId, String>,
+    connected: HashMap<ClientId, Uuid>,
     messages: Vec<(ClientId, String)>,
 }
 
@@ -112,7 +107,6 @@ fn main() {
         .insert_resource(args)
         .insert_resource(AuthInfo::default())
         .insert_resource(AuthInputState::default())
-        .insert_resource(UsernameInputState::default())
         .insert_resource(ChatInputState::default())
         .insert_resource(TokioRuntimeResource::new(tx, rx))
         .insert_resource(ServerBrowser::default())
@@ -144,16 +138,16 @@ fn connection_event_handler(
     mut connection_event_reader: EventReader<ConnectionEvent>,
     mut next_connection_state: ResMut<NextState<ConnectionState>>,
     client: Res<QuinnetClient>,
-    username_input_state: Res<UsernameInputState>,
+    auth_info: Res<AuthInfo>,
 ) {
     for _ in connection_event_reader.read() {
+        if let Some(user) = &auth_info.user {
+            client
+                .connection()
+                .send_message(ClientMessage::Join { user_id: user.id })
+                .unwrap();
+        }
         next_connection_state.set(ConnectionState::Connected);
-        client
-            .connection()
-            .send_message(ClientMessage::Join {
-                username: username_input_state.text.clone(),
-            })
-            .unwrap();
     }
 }
 
@@ -162,11 +156,8 @@ fn handle_server_messages(mut client: ResMut<QuinnetClient>, mut server_info: Re
         client.connection_mut().receive_message::<ServerMessage>()
     {
         match message {
-            ServerMessage::ClientConnected {
-                client_id,
-                username,
-            } => {
-                server_info.connected.insert(client_id, username);
+            ServerMessage::ClientConnected { client_id, user_id } => {
+                server_info.connected.insert(client_id, user_id);
             }
             ServerMessage::ClientDisconnected { client_id } => {
                 server_info.connected.remove(&client_id);
@@ -268,22 +259,17 @@ fn server_ui_system(
             client_event_writer.send(ClientEvent::Disconnect);
         }
         ui.label("Connected users:");
-        for (_client_id, username) in server_info.connected.iter() {
-            ui.label(username);
+        for (_client_id, user_id) in server_info.connected.iter() {
+            ui.label(format!("{}", user_id));
         }
     });
 
     egui::Window::new("Chat").show(contexts.ctx_mut(), |ui| {
         for (client_id, message) in server_info.messages.iter() {
             // TODO: Handle properly
-            let client_id_string: String = format!("{client_id}");
-
-            let username = server_info
-                .connected
-                .get(client_id)
-                .unwrap_or(&client_id_string);
-
-            ui.label(format!("{}: {}", username, message));
+            if let Some(user_id) = server_info.connected.get(client_id) {
+                ui.label(format!("{}: {}", user_id, message));
+            }
         }
 
         ui.text_edit_singleline(&mut chat_input_state.text);
@@ -302,16 +288,12 @@ fn server_browser_ui_system(
     mut contexts: EguiContexts,
     server_browser_resource: Res<ServerBrowser>,
     mut client_event_writer: EventWriter<ClientEvent>,
-    mut username_input_state: ResMut<UsernameInputState>,
     auth_info: Res<AuthInfo>,
 ) {
     egui::Window::new("Servers").show(contexts.ctx_mut(), |ui| {
         if let Some(user) = &auth_info.user {
             ui.label(format!("user_id: {}", user.id));
         }
-
-        ui.label("Name:");
-        ui.text_edit_singleline(&mut username_input_state.text);
 
         if let Some(servers) = &server_browser_resource.servers {
             for server in servers.iter() {
@@ -333,29 +315,29 @@ fn event_system(
     mut client: ResMut<QuinnetClient>,
     mut next_connection_state: ResMut<NextState<ConnectionState>>,
     mut server_info: ResMut<ServerInfo>,
-    username_input_state: Res<UsernameInputState>,
+    auth_info: Res<AuthInfo>,
 ) {
     for event in client_event_reader.read() {
         match event {
             ClientEvent::Connect(id) => {
                 if let Some(servers) = &server_browser_resource.servers {
                     if let Some(server) = servers.iter().find(|server| &server.id == id) {
-                        let client_id = client
-                            .open_connection(
-                                ClientEndpointConfiguration::from_ips(
-                                    server.addr,
-                                    server.port,
-                                    IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
-                                    0,
-                                ),
-                                CertificateVerificationMode::SkipVerification,
-                                ChannelsConfiguration::default(),
-                            )
-                            .unwrap();
-                        server_info.id = Some(*id);
-                        server_info
-                            .connected
-                            .insert(client_id, username_input_state.text.clone());
+                        if let Some(user) = &auth_info.user {
+                            let client_id = client
+                                .open_connection(
+                                    ClientEndpointConfiguration::from_ips(
+                                        server.addr,
+                                        server.port,
+                                        IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
+                                        0,
+                                    ),
+                                    CertificateVerificationMode::SkipVerification,
+                                    ChannelsConfiguration::default(),
+                                )
+                                .unwrap();
+                            server_info.id = Some(*id);
+                            server_info.connected.insert(client_id, user.id);
+                        }
                     }
                 }
             }

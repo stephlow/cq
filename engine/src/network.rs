@@ -1,9 +1,10 @@
 use bevy_quinnet::shared::ClientId;
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub enum ClientMessage {
-    Join { username: String },
+    Join { user_id: Uuid },
     Disconnect,
     ChatMessage { message: String },
 }
@@ -12,7 +13,7 @@ pub enum ClientMessage {
 pub enum ServerMessage {
     ClientConnected {
         client_id: ClientId,
-        username: String,
+        user_id: Uuid,
     },
     ClientDisconnected {
         client_id: ClientId,

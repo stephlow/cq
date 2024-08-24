@@ -20,6 +20,7 @@ use std::{
 };
 use time::OffsetDateTime;
 use tokio::sync::mpsc::channel;
+use uuid::Uuid;
 
 #[derive(Parser, Debug, Resource)]
 #[command(version, about, long_about = None)]
@@ -50,7 +51,7 @@ enum TokioServerMessage {
 
 #[derive(Default, Resource)]
 struct ConnectionResource {
-    users: HashMap<ClientId, String>,
+    users: HashMap<ClientId, Uuid>,
     server: Option<GameServer>,
 }
 
@@ -106,14 +107,11 @@ fn handle_client_messages(
             endpoint.try_receive_message_from::<ClientMessage>(client_id)
         {
             match message {
-                ClientMessage::Join { username } => {
+                ClientMessage::Join { user_id } => {
                     endpoint
-                        .broadcast_message(ServerMessage::ClientConnected {
-                            client_id,
-                            username: username.clone(),
-                        })
+                        .broadcast_message(ServerMessage::ClientConnected { client_id, user_id })
                         .unwrap();
-                    connection_resource.users.insert(client_id, username);
+                    connection_resource.users.insert(client_id, user_id);
                 }
                 ClientMessage::Disconnect {} => {
                     connection_resource.users.remove(&client_id);

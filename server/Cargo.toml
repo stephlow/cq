@@ -12,3 +12,4 @@ engine = { path = "../engine" }
 time = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
+uuid = { workspace = true }
