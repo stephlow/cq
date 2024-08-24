@@ -3,15 +3,23 @@ use axum::{response::IntoResponse, routing::get, Extension, Json, Router};
 use bevy::{app::ScheduleRunnerPlugin, log::tracing_subscriber, prelude::*};
 use bevy_quinnet::shared::ClientId;
 use clap::{arg, Parser};
-use engine::{models::api::servers::Server, resources::TokioRuntimeResource};
-use plugins::network::{ConnectionResource, NetworkPlugin};
+use engine::{
+    api_client::{ping_server, register_server},
+    models::api::servers::Server,
+};
+use futures::future::join_all;
+use plugins::network::NetworkPlugin;
 use std::{collections::HashMap, net::IpAddr, time::Duration};
-use tokio::sync::{mpsc, oneshot};
+use time::OffsetDateTime;
+use tokio::{
+    sync::{mpsc, oneshot},
+    time::sleep,
+};
 use uuid::Uuid;
 
 mod plugins;
 
-#[derive(Parser, Debug, Resource)]
+#[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct ServerArgs {
     /// The name of the server
@@ -34,11 +42,14 @@ struct ServerArgs {
 }
 
 enum AppMessage {
+    SetServer(Server),
+    GetServer(oneshot::Sender<Option<Server>>),
     GetConnections(oneshot::Sender<HashMap<ClientId, Uuid>>),
 }
 
 #[derive(Resource)]
 struct AppState {
+    server: Option<Server>,
     connections: HashMap<ClientId, Uuid>,
     tx: mpsc::Sender<AppMessage>,
     rx: mpsc::Receiver<AppMessage>,
@@ -47,16 +58,12 @@ struct AppState {
 impl AppState {
     fn new(tx: mpsc::Sender<AppMessage>, rx: mpsc::Receiver<AppMessage>) -> Self {
         Self {
+            server: None,
             connections: HashMap::new(),
             tx,
             rx,
         }
     }
-}
-
-enum TokioServerMessage {
-    PingServer(Server),
-    RegisterServer(Server),
 }
 
 #[tokio::main]
@@ -68,33 +75,70 @@ async fn main() -> Result<()> {
     let (tx, rx) = mpsc::channel::<AppMessage>(32);
 
     let args = ServerArgs::parse();
+
     let port = args.port.clone();
     let web_port = args.web_port.clone();
 
     let bevy_tx = tx.clone();
-    let app_handle = tokio::spawn(async move {
+
+    let bevy_handle = tokio::spawn(async move {
         App::new()
             .add_plugins(MinimalPlugins.set(ScheduleRunnerPlugin::run_loop(
                 Duration::from_secs_f64(1.0 / 60.0),
             )))
             .insert_resource(AppState::new(bevy_tx, rx))
-            .insert_resource(args)
-            .insert_resource(TokioRuntimeResource::<TokioServerMessage>::new())
-            .add_systems(Update, tokio_receiver_system)
             .add_plugins(NetworkPlugin::new(port))
             .add_systems(Update, app_message_system)
             .run();
     });
 
-    let app = Router::new().route("/", get(get_root)).layer(Extension(tx));
+    let api_base_url = args.api_base_url.clone();
+    let addr = args.addr.clone();
+    let port = args.port.clone();
+    let name = args.name.clone();
 
-    let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", web_port))
+    let api_tx = tx.clone();
+    let api_handle = tokio::spawn(async move {
+        let server = register_server(
+            &api_base_url,
+            &engine::models::api::servers::RegisterServer { addr, port, name },
+        )
         .await
         .unwrap();
 
-    axum::serve(listener, app).await.unwrap();
+        let id = server.id.clone();
+        let mut last_ping = OffsetDateTime::now_utc();
 
-    app_handle.await.unwrap();
+        api_tx.send(AppMessage::SetServer(server)).await.unwrap();
+
+        loop {
+            let now = OffsetDateTime::now_utc();
+
+            if now - last_ping >= Duration::from_secs(30) {
+                let server = ping_server(&api_base_url, &id).await.unwrap();
+                api_tx.send(AppMessage::SetServer(server)).await.unwrap();
+            }
+
+            last_ping = OffsetDateTime::now_utc();
+            sleep(Duration::from_secs(30)).await;
+        }
+    });
+
+    let axum_tx = tx.clone();
+    let axum_handle = tokio::spawn(async move {
+        let app = Router::new()
+            .route("/", get(get_server))
+            .route("/connections", get(get_connections))
+            .layer(Extension(axum_tx));
+
+        let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", web_port))
+            .await
+            .unwrap();
+
+        axum::serve(listener, app).await.unwrap();
+    });
+
+    join_all([api_handle, bevy_handle, axum_handle]).await;
 
     Ok(())
 }
@@ -102,15 +146,32 @@ async fn main() -> Result<()> {
 fn app_message_system(mut state: ResMut<AppState>) {
     if let Ok(message) = state.rx.try_recv() {
         match message {
+            AppMessage::SetServer(server) => {
+                state.server = Some(server);
+            }
             AppMessage::GetConnections(tx) => {
                 tx.send(state.connections.clone()).unwrap();
+            }
+            AppMessage::GetServer(tx) => {
+                tx.send(state.server.clone()).unwrap();
             }
         }
     }
 }
 
 #[axum::debug_handler]
-async fn get_root(Extension(tx): Extension<mpsc::Sender<AppMessage>>) -> impl IntoResponse {
+async fn get_server(Extension(tx): Extension<mpsc::Sender<AppMessage>>) -> impl IntoResponse {
+    let (resp_tx, resp_rx) = tokio::sync::oneshot::channel();
+
+    tx.send(AppMessage::GetServer(resp_tx)).await.unwrap();
+
+    let connections = resp_rx.await.unwrap();
+
+    Json(connections)
+}
+
+#[axum::debug_handler]
+async fn get_connections(Extension(tx): Extension<mpsc::Sender<AppMessage>>) -> impl IntoResponse {
     let (resp_tx, resp_rx) = tokio::sync::oneshot::channel();
 
     tx.send(AppMessage::GetConnections(resp_tx)).await.unwrap();
@@ -118,16 +179,4 @@ async fn get_root(Extension(tx): Extension<mpsc::Sender<AppMessage>>) -> impl In
     let connections = resp_rx.await.unwrap();
 
     Json(connections)
-}
-
-fn tokio_receiver_system(
-    mut connection_resource: ResMut<ConnectionResource>,
-    mut tokio_runtime_resource: ResMut<TokioRuntimeResource<TokioServerMessage>>,
-) {
-    if let Ok(message) = tokio_runtime_resource.receiver.try_recv() {
-        match message {
-            TokioServerMessage::RegisterServer(server) => connection_resource.server = Some(server),
-            TokioServerMessage::PingServer(server) => connection_resource.server = Some(server),
-        }
-    }
 }

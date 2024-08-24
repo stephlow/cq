@@ -1,4 +1,4 @@
-use crate::{AppState, ServerArgs, TokioServerMessage};
+use crate::AppState;
 use bevy::prelude::*;
 use bevy_quinnet::{
     server::{
@@ -7,29 +7,8 @@ use bevy_quinnet::{
     },
     shared::channels::ChannelsConfiguration,
 };
-use engine::{
-    api_client::{ping_server, register_server},
-    models::api::servers::{RegisterServer, Server},
-    network::{ClientMessage, ServerMessage},
-    resources::TokioRuntimeResource,
-};
+use engine::network::{ClientMessage, ServerMessage};
 use std::net::{IpAddr, Ipv4Addr};
-use time::{Duration, OffsetDateTime};
-
-#[derive(Resource)]
-pub struct ConnectionResource {
-    pub server: Option<Server>,
-    pub last_ping_attempt: OffsetDateTime,
-}
-
-impl Default for ConnectionResource {
-    fn default() -> Self {
-        Self {
-            server: None,
-            last_ping_attempt: OffsetDateTime::now_utc(),
-        }
-    }
-}
 
 #[derive(Resource)]
 pub struct ServerConfig {
@@ -49,12 +28,9 @@ impl NetworkPlugin {
 impl Plugin for NetworkPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(ServerConfig { port: self.port })
-            .insert_resource(ConnectionResource::default())
             .add_plugins(QuinnetServerPlugin::default())
             .add_systems(Startup, start_listening)
-            .add_systems(Update, handle_client_messages)
-            .add_systems(Startup, register_server_system)
-            .add_systems(Update, ping_server_system);
+            .add_systems(Update, handle_client_messages);
     }
 }
 
@@ -114,63 +90,6 @@ fn handle_client_messages(mut server: ResMut<QuinnetServer>, mut app_state: ResM
                         .unwrap();
                 }
             }
-        }
-    }
-}
-
-fn register_server_system(
-    server_args: Res<ServerArgs>,
-    tokio_runtime_resource: Res<TokioRuntimeResource<TokioServerMessage>>,
-) {
-    let tx = tokio_runtime_resource.sender.clone();
-    let api_base_url = server_args.api_base_url.clone();
-    let addr = server_args.addr;
-    let port = server_args.port;
-    let name = server_args.name.clone();
-
-    tokio_runtime_resource.runtime.spawn(async move {
-        let result = register_server(&api_base_url, &RegisterServer { addr, port, name }).await;
-
-        match result {
-            Ok(server) => tx
-                .send(TokioServerMessage::RegisterServer(server))
-                .await
-                .unwrap(),
-            Err(error) => error!(error = ?error, "Create"),
-        }
-    });
-}
-
-fn ping_server_system(
-    server_args: Res<ServerArgs>,
-    mut connection_resource: ResMut<ConnectionResource>,
-    tokio_runtime_resource: Res<TokioRuntimeResource<TokioServerMessage>>,
-) {
-    if let Some(server) = &connection_resource.server {
-        let now = OffsetDateTime::now_utc();
-        let timeout = Duration::seconds(60);
-
-        if now - server.last_ping >= timeout
-            && now - connection_resource.last_ping_attempt >= timeout
-        {
-            let tx = tokio_runtime_resource.sender.clone();
-
-            let api_base_url = server_args.api_base_url.clone();
-            let id = server.id;
-
-            tokio_runtime_resource.runtime.spawn(async move {
-                let result = ping_server(&api_base_url, &id).await;
-
-                match result {
-                    Ok(server) => tx
-                        .send(TokioServerMessage::PingServer(server))
-                        .await
-                        .unwrap(),
-                    Err(error) => error!(error = ?error, "Ping"),
-                }
-            });
-
-            connection_resource.last_ping_attempt = OffsetDateTime::now_utc();
         }
     }
 }
