@@ -1,5 +1,4 @@
 use anyhow::Result;
-use axum::{response::IntoResponse, routing::get, Extension, Json, Router};
 use bevy::{app::ScheduleRunnerPlugin, log::tracing_subscriber, prelude::*};
 use bevy_quinnet::shared::ClientId;
 use clap::{arg, Parser};
