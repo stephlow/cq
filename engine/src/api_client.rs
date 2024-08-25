@@ -16,7 +16,7 @@ static CLIENT: Lazy<Client> = Lazy::new(|| {
         .expect("failed to initialize client")
 });
 
-pub async fn authenticate(api_base_url: &str, credentials: Credentials) -> Result<AuthResponse> {
+pub async fn authenticate(api_base_url: &str, credentials: &Credentials) -> Result<AuthResponse> {
     let response = CLIENT
         .request(Method::POST, format!("{api_base_url}/auth"))
         .json(&credentials)

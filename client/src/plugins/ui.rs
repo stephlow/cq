@@ -1,16 +1,12 @@
-use super::{api::ApiResource, network::ServerInfo};
-use crate::{AuthInfo, AuthState, ClientArgs, ClientEvent, ConnectionState, TokioClientMessage};
+use super::{
+    api::{ApiEvent, ApiResource},
+    network::ServerInfo,
+};
+use crate::{AuthState, ClientEvent, ConnectionState};
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts, EguiPlugin};
 use bevy_quinnet::client::QuinnetClient;
-use engine::{
-    api_client,
-    models::{
-        api::{auth::Credentials, users::NewUser},
-        network::ClientMessage,
-    },
-    resources::TokioRuntimeResource,
-};
+use engine::models::network::ClientMessage;
 
 pub struct UiPlugin;
 
@@ -58,8 +54,7 @@ struct ChatInputState {
 }
 
 fn auth_ui_system(
-    client_args: Res<ClientArgs>,
-    tokio: Res<TokioRuntimeResource<TokioClientMessage>>,
+    mut api_events: EventWriter<ApiEvent>,
     mut contexts: EguiContexts,
     mut login_input_state: ResMut<LoginInputState>,
     mut register_input_state: ResMut<RegisterInputState>,
@@ -73,26 +68,8 @@ fn auth_ui_system(
         if ui.button("Login").clicked() {
             let username = login_input_state.username.clone();
             let password = login_input_state.password.clone();
-            let tx = tokio.sender.clone();
 
-            let api_base_url = client_args.api_base_url.clone();
-            tokio.runtime.spawn(async move {
-                let auth_response =
-                    api_client::authenticate(&api_base_url, Credentials { username, password })
-                        .await
-                        .unwrap();
-
-                let user = api_client::get_profile(&api_base_url, &auth_response.token)
-                    .await
-                    .unwrap();
-
-                tx.send(TokioClientMessage::Authenticated {
-                    token: auth_response.token,
-                    user,
-                })
-                .await
-                .unwrap();
-            });
+            api_events.send(ApiEvent::Authenticate { username, password });
         }
     });
 
@@ -108,31 +85,11 @@ fn auth_ui_system(
             let username = register_input_state.username.clone();
             let email = register_input_state.email.clone();
             let password = register_input_state.password.clone();
-            let tx = tokio.sender.clone();
 
-            let api_base_url = client_args.api_base_url.clone();
-            tokio.runtime.spawn(async move {
-                let auth_response = api_client::register_user(
-                    &api_base_url,
-                    NewUser {
-                        username,
-                        email,
-                        password,
-                    },
-                )
-                .await
-                .unwrap();
-
-                let user = api_client::get_profile(&api_base_url, &auth_response.token)
-                    .await
-                    .unwrap();
-
-                tx.send(TokioClientMessage::Authenticated {
-                    token: auth_response.token,
-                    user,
-                })
-                .await
-                .unwrap();
+            api_events.send(ApiEvent::Register {
+                username,
+                email,
+                password,
             });
         }
     });
@@ -180,10 +137,9 @@ fn server_browser_ui_system(
     api: Res<ApiResource>,
     mut contexts: EguiContexts,
     mut client_event_writer: EventWriter<ClientEvent>,
-    auth_info: Res<AuthInfo>,
 ) {
     egui::Window::new("Servers").show(contexts.ctx_mut(), |ui| {
-        if let Some(user) = &auth_info.user {
+        if let Some(user) = &api.profile.data {
             ui.label(format!("user_id: {}", user.id));
         }
 
