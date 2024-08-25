@@ -1,32 +1,29 @@
 use bevy::prelude::*;
-use bevy_egui::{
-    egui::{self},
-    EguiContexts, EguiPlugin,
-};
 use bevy_quinnet::{
     client::{
         certificate::CertificateVerificationMode,
         connection::{ClientEndpointConfiguration, ConnectionEvent},
-        QuinnetClient, QuinnetClientPlugin,
+        QuinnetClient,
     },
     shared::{channels::ChannelsConfiguration, ClientId},
 };
 use clap::Parser;
 use engine::{
-    api_client::{self, list_servers},
-    models::api::{
-        auth::Credentials,
-        servers::Server,
-        users::{NewUser, User},
+    api_client::list_servers,
+    models::{
+        api::{servers::Server, users::User},
+        network::{ClientMessage, ServerMessage},
     },
-    models::network::{ClientMessage, ServerMessage},
     resources::TokioRuntimeResource,
 };
+use plugins::{network::NetworkPlugin, ui::UiPlugin};
 use std::{
     collections::HashMap,
     net::{IpAddr, Ipv4Addr},
 };
 use uuid::Uuid;
+
+mod plugins;
 
 #[derive(Parser, Debug, Resource)]
 #[command(version, about, long_about = None)]
@@ -39,24 +36,6 @@ struct ClientArgs {
 struct AuthInfo {
     token: Option<String>,
     user: Option<User>,
-}
-
-#[derive(Default, Resource)]
-struct LoginInputState {
-    username: String,
-    password: String,
-}
-
-#[derive(Default, Resource)]
-struct RegisterInputState {
-    username: String,
-    email: String,
-    password: String,
-}
-
-#[derive(Default, Resource)]
-struct ChatInputState {
-    text: String,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default, States)]
@@ -101,8 +80,8 @@ fn main() {
 
     App::new()
         .add_plugins(DefaultPlugins)
-        .add_plugins(EguiPlugin)
-        .add_plugins(QuinnetClientPlugin::default())
+        .add_plugins(UiPlugin)
+        .add_plugins(NetworkPlugin)
         .init_state::<AuthState>()
         .init_state::<ConnectionState>()
         .add_systems(Update, connection_event_handler)
@@ -115,30 +94,11 @@ fn main() {
         .add_event::<ClientEvent>()
         .insert_resource(args)
         .insert_resource(AuthInfo::default())
-        .insert_resource(LoginInputState::default())
-        .insert_resource(RegisterInputState::default())
-        .insert_resource(ChatInputState::default())
         .insert_resource(TokioRuntimeResource::<TokioClientMessage>::new())
         .insert_resource(ServerBrowser::default())
         .insert_resource(ServerInfo::default())
         .add_systems(Update, tokio_receiver_system)
         .add_systems(Startup, load_servers)
-        .add_systems(
-            Update,
-            auth_ui_system.run_if(in_state(AuthState::Anonymous)),
-        )
-        .add_systems(
-            Update,
-            server_ui_system
-                .run_if(in_state(AuthState::Authenticated))
-                .run_if(in_state(ConnectionState::Connected)),
-        )
-        .add_systems(
-            Update,
-            server_browser_ui_system
-                .run_if(in_state(AuthState::Authenticated))
-                .run_if(in_state(ConnectionState::Disconnected)),
-        )
         .add_systems(Update, event_system)
         .add_systems(Last, handle_disconnect)
         .run();
@@ -213,150 +173,6 @@ fn load_servers(
                 .await
                 .unwrap(),
             Err(error) => error!(error = ?error, "Load servers"),
-        }
-    });
-}
-
-fn auth_ui_system(
-    client_args: Res<ClientArgs>,
-    tokio: Res<TokioRuntimeResource<TokioClientMessage>>,
-    mut contexts: EguiContexts,
-    mut login_input_state: ResMut<LoginInputState>,
-    mut register_input_state: ResMut<RegisterInputState>,
-) {
-    egui::Window::new("Login").show(contexts.ctx_mut(), |ui| {
-        ui.label("Username:");
-        ui.text_edit_singleline(&mut login_input_state.username);
-        ui.label("Password:");
-        ui.text_edit_singleline(&mut login_input_state.password);
-
-        if ui.button("Login").clicked() {
-            let username = login_input_state.username.clone();
-            let password = login_input_state.password.clone();
-            let tx = tokio.sender.clone();
-
-            let api_base_url = client_args.api_base_url.clone();
-            tokio.runtime.spawn(async move {
-                let auth_response =
-                    api_client::authenticate(&api_base_url, Credentials { username, password })
-                        .await
-                        .unwrap();
-
-                let user = api_client::get_profile(&api_base_url, &auth_response.token)
-                    .await
-                    .unwrap();
-
-                tx.send(TokioClientMessage::Authenticated {
-                    token: auth_response.token,
-                    user,
-                })
-                .await
-                .unwrap();
-            });
-        }
-    });
-
-    egui::Window::new("Register").show(contexts.ctx_mut(), |ui| {
-        ui.label("Username:");
-        ui.text_edit_singleline(&mut register_input_state.username);
-        ui.label("Email:");
-        ui.text_edit_singleline(&mut register_input_state.email);
-        ui.label("Password:");
-        ui.text_edit_singleline(&mut register_input_state.password);
-
-        if ui.button("Register").clicked() {
-            let username = register_input_state.username.clone();
-            let email = register_input_state.email.clone();
-            let password = register_input_state.password.clone();
-            let tx = tokio.sender.clone();
-
-            let api_base_url = client_args.api_base_url.clone();
-            tokio.runtime.spawn(async move {
-                let auth_response = api_client::register_user(
-                    &api_base_url,
-                    NewUser {
-                        username,
-                        email,
-                        password,
-                    },
-                )
-                .await
-                .unwrap();
-
-                let user = api_client::get_profile(&api_base_url, &auth_response.token)
-                    .await
-                    .unwrap();
-
-                tx.send(TokioClientMessage::Authenticated {
-                    token: auth_response.token,
-                    user,
-                })
-                .await
-                .unwrap();
-            });
-        }
-    });
-}
-
-fn server_ui_system(
-    mut contexts: EguiContexts,
-    mut client_event_writer: EventWriter<ClientEvent>,
-    server_info: Res<ServerInfo>,
-    mut chat_input_state: ResMut<ChatInputState>,
-    client: Res<QuinnetClient>,
-) {
-    egui::Window::new("Server").show(contexts.ctx_mut(), |ui| {
-        ui.label("Connected");
-        if ui.button("Disconnect").clicked() {
-            client_event_writer.send(ClientEvent::Disconnect);
-        }
-        ui.label("Connected users:");
-        for (_client_id, user_id) in server_info.connected.iter() {
-            ui.label(format!("{}", user_id));
-        }
-    });
-
-    egui::Window::new("Chat").show(contexts.ctx_mut(), |ui| {
-        for (client_id, message) in server_info.messages.iter() {
-            // TODO: Handle properly
-            if let Some(user_id) = server_info.connected.get(client_id) {
-                ui.label(format!("{}: {}", user_id, message));
-            }
-        }
-
-        ui.text_edit_singleline(&mut chat_input_state.text);
-        if ui.button("Send").clicked() {
-            let message = chat_input_state.text.clone();
-            client
-                .connection()
-                .send_message(ClientMessage::ChatMessage { message })
-                .unwrap();
-            chat_input_state.text = String::from("");
-        }
-    });
-}
-
-fn server_browser_ui_system(
-    mut contexts: EguiContexts,
-    server_browser_resource: Res<ServerBrowser>,
-    mut client_event_writer: EventWriter<ClientEvent>,
-    auth_info: Res<AuthInfo>,
-) {
-    egui::Window::new("Servers").show(contexts.ctx_mut(), |ui| {
-        if let Some(user) = &auth_info.user {
-            ui.label(format!("user_id: {}", user.id));
-        }
-
-        if let Some(servers) = &server_browser_resource.servers {
-            for server in servers.iter() {
-                ui.label(format!("Server name: {}:{}", server.name, server.port));
-                ui.label(server.addr.to_string());
-                if ui.button("Connect").clicked() {
-                    client_event_writer.send(ClientEvent::Connect(server.id));
-                }
-            }
-        } else {
-            ui.label("No servers");
         }
     });
 }
