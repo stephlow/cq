@@ -114,11 +114,11 @@ fn tokio_receiver_system(
 }
 
 fn load_servers(
-    mut x: EventWriter<ApiEvent>,
+    mut api_events: EventWriter<ApiEvent>,
     client_args: Res<ClientArgs>,
     tokio: Res<TokioRuntimeResource<TokioClientMessage>>,
 ) {
-    x.send(ApiEvent::LoadServers);
+    api_events.send(ApiEvent::LoadServers);
     let api_base_url = client_args.api_base_url.clone();
     let tx = tokio.sender.clone();
 
