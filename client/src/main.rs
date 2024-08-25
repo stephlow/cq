@@ -3,7 +3,7 @@ use bevy_quinnet::client::{connection::ConnectionEvent, QuinnetClient};
 use clap::Parser;
 use engine::models::network::ClientMessage;
 use plugins::{
-    api::{ApiEvent, ApiPlugin, ApiResource},
+    api::{ApiPlugin, ApiResource},
     network::NetworkPlugin,
     ui::UiPlugin,
 };
@@ -50,7 +50,6 @@ fn main() {
         .init_state::<ConnectionState>()
         .add_systems(Update, connection_event_handler)
         .add_event::<ClientEvent>()
-        .add_systems(Startup, load_servers)
         .run();
 }
 
@@ -69,8 +68,4 @@ fn connection_event_handler(
         }
         next_connection_state.set(ConnectionState::Connected);
     }
-}
-
-fn load_servers(mut api_events: EventWriter<ApiEvent>) {
-    api_events.send(ApiEvent::LoadServers);
 }

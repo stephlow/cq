@@ -224,11 +224,13 @@ fn api_message_handler_system(
                 api_resource.token.finish(token);
                 next_auth_state.set(AuthState::Authenticated);
                 events.send(ApiEvent::LoadProfile);
+                events.send(ApiEvent::LoadServers);
             }
             ApiMessage::RegisterFulfilled(token) => {
                 api_resource.token.finish(token);
                 next_auth_state.set(AuthState::Authenticated);
                 events.send(ApiEvent::LoadProfile);
+                events.send(ApiEvent::LoadServers);
             }
             ApiMessage::LoadProfileFulfilled(user) => {
                 api_resource.profile.finish(user);
