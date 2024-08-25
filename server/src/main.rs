@@ -16,8 +16,10 @@ use tokio::{
     time::sleep,
 };
 use uuid::Uuid;
+use webserver::create_router;
 
 mod plugins;
+mod webserver;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -124,12 +126,9 @@ async fn main() -> Result<()> {
         }
     });
 
-    let axum_tx = tx.clone();
-    let axum_handle = tokio::spawn(async move {
-        let app = Router::new()
-            .route("/", get(get_server))
-            .route("/connections", get(get_connections))
-            .layer(Extension(axum_tx));
+    let webserver_tx = tx.clone();
+    let webserver_handle = tokio::spawn(async move {
+        let app = create_router(webserver_tx);
 
         let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", web_port))
             .await
@@ -138,7 +137,7 @@ async fn main() -> Result<()> {
         axum::serve(listener, app).await.unwrap();
     });
 
-    join_all([api_handle, bevy_handle, axum_handle]).await;
+    join_all([api_handle, bevy_handle, webserver_handle]).await;
 
     Ok(())
 }
@@ -157,26 +156,4 @@ fn app_message_system(mut state: ResMut<AppState>) {
             }
         }
     }
-}
-
-#[axum::debug_handler]
-async fn get_server(Extension(tx): Extension<mpsc::Sender<AppMessage>>) -> impl IntoResponse {
-    let (resp_tx, resp_rx) = tokio::sync::oneshot::channel();
-
-    tx.send(AppMessage::GetServer(resp_tx)).await.unwrap();
-
-    let connections = resp_rx.await.unwrap();
-
-    Json(connections)
-}
-
-#[axum::debug_handler]
-async fn get_connections(Extension(tx): Extension<mpsc::Sender<AppMessage>>) -> impl IntoResponse {
-    let (resp_tx, resp_rx) = tokio::sync::oneshot::channel();
-
-    tx.send(AppMessage::GetConnections(resp_tx)).await.unwrap();
-
-    let connections = resp_rx.await.unwrap();
-
-    Json(connections)
 }
