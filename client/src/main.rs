@@ -10,6 +10,7 @@ use engine::{
     resources::TokioRuntimeResource,
 };
 use plugins::{
+    api::{ApiEvent, ApiPlugin},
     network::{NetworkPlugin, ServerBrowser},
     ui::UiPlugin,
 };
@@ -60,6 +61,7 @@ fn main() {
 
     App::new()
         .add_plugins(DefaultPlugins)
+        .add_plugins(ApiPlugin)
         .add_plugins(UiPlugin)
         .add_plugins(NetworkPlugin)
         .init_state::<AuthState>()
@@ -112,9 +114,11 @@ fn tokio_receiver_system(
 }
 
 fn load_servers(
+    mut x: EventWriter<ApiEvent>,
     client_args: Res<ClientArgs>,
     tokio: Res<TokioRuntimeResource<TokioClientMessage>>,
 ) {
+    x.send(ApiEvent::LoadServers);
     let api_base_url = client_args.api_base_url.clone();
     let tx = tokio.sender.clone();
 

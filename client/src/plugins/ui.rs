@@ -17,9 +17,9 @@ pub struct UiPlugin;
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(EguiPlugin)
-            .insert_resource(LoginInputState::default())
-            .insert_resource(RegisterInputState::default())
-            .insert_resource(ChatInputState::default())
+            .init_resource::<LoginInputState>()
+            .init_resource::<RegisterInputState>()
+            .init_resource::<ChatInputState>()
             .add_systems(
                 Update,
                 auth_ui_system.run_if(in_state(AuthState::Anonymous)),

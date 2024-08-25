@@ -1,8 +1,3 @@
-use std::{
-    collections::HashMap,
-    net::{IpAddr, Ipv4Addr},
-};
-
 use bevy::prelude::*;
 use bevy_quinnet::{
     client::{
@@ -15,6 +10,10 @@ use engine::models::{
     api::servers::Server,
     network::{ClientMessage, ServerMessage},
 };
+use std::{
+    collections::HashMap,
+    net::{IpAddr, Ipv4Addr},
+};
 use uuid::Uuid;
 
 use crate::{AuthState, ClientEvent, ConnectionState};
@@ -24,8 +23,8 @@ pub struct NetworkPlugin;
 impl Plugin for NetworkPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(QuinnetClientPlugin::default())
-            .insert_resource(ServerBrowser::default())
-            .insert_resource(ServerInfo::default())
+            .init_resource::<ServerBrowser>()
+            .init_resource::<ServerInfo>()
             .add_systems(Update, event_system)
             .add_systems(Last, handle_disconnect)
             .add_systems(
