@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use crate::AuthState;
 use bevy::prelude::*;
 use engine::{
@@ -10,6 +8,7 @@ use engine::{
         users::{NewUser, User},
     },
 };
+use std::collections::HashMap;
 use tokio::{runtime::Runtime, sync::mpsc};
 use uuid::Uuid;
 
@@ -49,11 +48,11 @@ pub enum ApiEvent {
 }
 
 enum ApiMessage {
-    AuthenticateFulfilled(String),
-    RegisterFulfilled(String),
-    LoadProfileFulfilled(User),
-    LoadServersFulfilled(Vec<Server>),
-    LoadUserFulfilled(User),
+    AuthenticateFulfilled(Result<String, ()>),
+    RegisterFulfilled(Result<String, ()>),
+    LoadProfileFulfilled(Result<User, ()>),
+    LoadServersFulfilled(Result<Vec<Server>, ()>),
+    LoadUserFulfilled(Result<User, Uuid>),
 }
 
 #[derive(Resource)]
@@ -114,6 +113,11 @@ impl<T> LoadableData<T> {
         self.data = Some(data);
         self.loading = true;
     }
+
+    fn failed(&mut self) {
+        self.data = None;
+        self.loading = false;
+    }
 }
 
 fn api_event_handler_system(mut api: ResMut<ApiResource>, mut events: EventReader<ApiEvent>) {
@@ -132,10 +136,13 @@ fn api_event_handler_system(mut api: ResMut<ApiResource>, mut events: EventReade
                         match authenticate(&api_base_url, &Credentials { username, password }).await
                         {
                             Ok(AuthResponse { token }) => tx
-                                .send(ApiMessage::AuthenticateFulfilled(token))
+                                .send(ApiMessage::AuthenticateFulfilled(Ok(token)))
                                 .await
                                 .unwrap(),
-                            Err(_) => {}
+                            Err(_) => tx
+                                .send(ApiMessage::AuthenticateFulfilled(Err(())))
+                                .await
+                                .unwrap(),
                         }
                     });
                 }
@@ -165,10 +172,14 @@ fn api_event_handler_system(mut api: ResMut<ApiResource>, mut events: EventReade
                         )
                         .await
                         {
-                            Ok(AuthResponse { token }) => {
-                                tx.send(ApiMessage::RegisterFulfilled(token)).await.unwrap()
-                            }
-                            Err(_) => {}
+                            Ok(AuthResponse { token }) => tx
+                                .send(ApiMessage::RegisterFulfilled(Ok(token)))
+                                .await
+                                .unwrap(),
+                            Err(_) => tx
+                                .send(ApiMessage::RegisterFulfilled(Err(())))
+                                .await
+                                .unwrap(),
                         }
                     });
                 }
@@ -185,10 +196,13 @@ fn api_event_handler_system(mut api: ResMut<ApiResource>, mut events: EventReade
                         api.runtime.spawn(async move {
                             match get_profile(&api_base_url, &token).await {
                                 Ok(user) => tx
-                                    .send(ApiMessage::LoadProfileFulfilled(user))
+                                    .send(ApiMessage::LoadProfileFulfilled(Ok(user)))
                                     .await
                                     .unwrap(),
-                                Err(_) => {}
+                                Err(_) => tx
+                                    .send(ApiMessage::LoadProfileFulfilled(Err(())))
+                                    .await
+                                    .unwrap(),
                             }
                         });
                     }
@@ -204,11 +218,14 @@ fn api_event_handler_system(mut api: ResMut<ApiResource>, mut events: EventReade
                     api.runtime.spawn(async move {
                         match list_servers(&api_base_url).await {
                             Ok(servers) => {
-                                tx.send(ApiMessage::LoadServersFulfilled(servers))
+                                tx.send(ApiMessage::LoadServersFulfilled(Ok(servers)))
                                     .await
                                     .unwrap();
                             }
-                            Err(_) => {}
+                            Err(_) => tx
+                                .send(ApiMessage::LoadServersFulfilled(Err(())))
+                                .await
+                                .unwrap(),
                         }
                     });
                 }
@@ -233,8 +250,14 @@ fn api_event_handler_system(mut api: ResMut<ApiResource>, mut events: EventReade
 
                     api.runtime.spawn(async move {
                         match get_user(&api_base_url, &id).await {
-                            Ok(user) => tx.send(ApiMessage::LoadUserFulfilled(user)).await.unwrap(),
-                            Err(_) => {}
+                            Ok(user) => tx
+                                .send(ApiMessage::LoadUserFulfilled(Ok(user)))
+                                .await
+                                .unwrap(),
+                            Err(_) => tx
+                                .send(ApiMessage::LoadUserFulfilled(Err(id.clone())))
+                                .await
+                                .unwrap(),
                         }
                     });
                 }
@@ -250,29 +273,56 @@ fn api_message_handler_system(
 ) {
     match api.rx.try_recv() {
         Ok(message) => match message {
-            ApiMessage::AuthenticateFulfilled(token) => {
-                api.token.finish(token);
-                auth_state.set(AuthState::Authenticated);
-                events.send(ApiEvent::LoadProfile);
-                events.send(ApiEvent::LoadServers);
-            }
-            ApiMessage::RegisterFulfilled(token) => {
-                api.token.finish(token);
-                auth_state.set(AuthState::Authenticated);
-                events.send(ApiEvent::LoadProfile);
-                events.send(ApiEvent::LoadServers);
-            }
-            ApiMessage::LoadProfileFulfilled(user) => {
-                api.profile.finish(user);
-            }
-            ApiMessage::LoadServersFulfilled(servers) => {
-                api.servers.finish(servers);
-            }
-            ApiMessage::LoadUserFulfilled(user) => {
-                if let Some(loadable) = api.users.get_mut(&user.id) {
-                    loadable.finish(user);
+            ApiMessage::AuthenticateFulfilled(result) => match result {
+                Ok(token) => {
+                    api.token.finish(token);
+                    auth_state.set(AuthState::Authenticated);
+                    events.send(ApiEvent::LoadProfile);
+                    events.send(ApiEvent::LoadServers);
                 }
-            }
+                Err(_) => {
+                    api.token.failed();
+                }
+            },
+            ApiMessage::RegisterFulfilled(result) => match result {
+                Ok(token) => {
+                    api.token.finish(token);
+                    auth_state.set(AuthState::Authenticated);
+                    events.send(ApiEvent::LoadProfile);
+                    events.send(ApiEvent::LoadServers);
+                }
+                Err(_) => {
+                    api.token.failed();
+                }
+            },
+            ApiMessage::LoadProfileFulfilled(result) => match result {
+                Ok(user) => {
+                    api.profile.finish(user);
+                }
+                Err(_) => {
+                    api.profile.failed();
+                }
+            },
+            ApiMessage::LoadServersFulfilled(result) => match result {
+                Ok(servers) => {
+                    api.servers.finish(servers);
+                }
+                Err(_) => {
+                    api.servers.failed();
+                }
+            },
+            ApiMessage::LoadUserFulfilled(result) => match result {
+                Ok(user) => {
+                    if let Some(loadable) = api.users.get_mut(&user.id) {
+                        loadable.finish(user);
+                    }
+                }
+                Err(id) => {
+                    if let Some(loadable) = api.users.get_mut(&id) {
+                        loadable.failed();
+                    }
+                }
+            },
         },
         Err(_) => {}
     }
