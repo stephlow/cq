@@ -116,22 +116,19 @@ impl<T> LoadableData<T> {
     }
 }
 
-fn api_event_handler_system(
-    mut api_resource: ResMut<ApiResource>,
-    mut events: EventReader<ApiEvent>,
-) {
+fn api_event_handler_system(mut api: ResMut<ApiResource>, mut events: EventReader<ApiEvent>) {
     for event in events.read() {
         match event {
             ApiEvent::Authenticate { username, password } => {
-                if !api_resource.token.loading {
-                    api_resource.token.start();
+                if !api.token.loading {
+                    api.token.start();
 
-                    let tx = api_resource.tx.clone();
-                    let api_base_url = api_resource.base_url.clone();
+                    let tx = api.tx.clone();
+                    let api_base_url = api.base_url.clone();
                     let username = username.clone();
                     let password = password.clone();
 
-                    api_resource.runtime.spawn(async move {
+                    api.runtime.spawn(async move {
                         match authenticate(&api_base_url, &Credentials { username, password }).await
                         {
                             Ok(AuthResponse { token }) => tx
@@ -148,16 +145,16 @@ fn api_event_handler_system(
                 email,
                 password,
             } => {
-                if !api_resource.token.loading {
-                    api_resource.token.start();
+                if !api.token.loading {
+                    api.token.start();
 
-                    let tx = api_resource.tx.clone();
-                    let api_base_url = api_resource.base_url.clone();
+                    let tx = api.tx.clone();
+                    let api_base_url = api.base_url.clone();
                     let username = username.clone();
                     let email = email.clone();
                     let password = password.clone();
 
-                    api_resource.runtime.spawn(async move {
+                    api.runtime.spawn(async move {
                         match register_user(
                             &api_base_url,
                             NewUser {
@@ -177,15 +174,15 @@ fn api_event_handler_system(
                 }
             }
             ApiEvent::LoadProfile => {
-                if !api_resource.profile.loading {
-                    api_resource.profile.start();
+                if !api.profile.loading {
+                    api.profile.start();
 
-                    let tx = api_resource.tx.clone();
-                    let api_base_url = api_resource.base_url.clone();
-                    if let Some(token) = &api_resource.token.data {
+                    let tx = api.tx.clone();
+                    let api_base_url = api.base_url.clone();
+                    if let Some(token) = &api.token.data {
                         let token = token.clone();
 
-                        api_resource.runtime.spawn(async move {
+                        api.runtime.spawn(async move {
                             match get_profile(&api_base_url, &token).await {
                                 Ok(user) => tx
                                     .send(ApiMessage::LoadProfileFulfilled(user))
@@ -198,13 +195,13 @@ fn api_event_handler_system(
                 }
             }
             ApiEvent::LoadServers => {
-                if !api_resource.servers.loading {
-                    api_resource.servers.start();
+                if !api.servers.loading {
+                    api.servers.start();
 
-                    let tx = api_resource.tx.clone();
-                    let api_base_url = api_resource.base_url.clone();
+                    let tx = api.tx.clone();
+                    let api_base_url = api.base_url.clone();
 
-                    api_resource.runtime.spawn(async move {
+                    api.runtime.spawn(async move {
                         match list_servers(&api_base_url).await {
                             Ok(servers) => {
                                 tx.send(ApiMessage::LoadServersFulfilled(servers))
@@ -217,26 +214,24 @@ fn api_event_handler_system(
                 }
             }
             ApiEvent::LoadUser(id) => {
-                let loadable = match api_resource.users.get_mut(&id) {
+                let loadable = match api.users.get_mut(&id) {
                     Some(loadable) => loadable,
                     None => {
-                        api_resource
-                            .users
-                            .insert(id.clone(), LoadableData::default());
+                        api.users.insert(id.clone(), LoadableData::default());
 
                         // Should be safe it's just inserted
-                        api_resource.users.get_mut(&id).unwrap()
+                        api.users.get_mut(&id).unwrap()
                     }
                 };
 
                 if !loadable.loading {
                     loadable.start();
 
-                    let tx = api_resource.tx.clone();
-                    let api_base_url = api_resource.base_url.clone();
+                    let tx = api.tx.clone();
+                    let api_base_url = api.base_url.clone();
                     let id = id.clone();
 
-                    api_resource.runtime.spawn(async move {
+                    api.runtime.spawn(async move {
                         match get_user(&api_base_url, &id).await {
                             Ok(user) => tx.send(ApiMessage::LoadUserFulfilled(user)).await.unwrap(),
                             Err(_) => {}
@@ -249,32 +244,32 @@ fn api_event_handler_system(
 }
 
 fn api_message_handler_system(
-    mut api_resource: ResMut<ApiResource>,
+    mut api: ResMut<ApiResource>,
     mut events: EventWriter<ApiEvent>,
-    mut next_auth_state: ResMut<NextState<AuthState>>,
+    mut auth_state: ResMut<NextState<AuthState>>,
 ) {
-    match api_resource.rx.try_recv() {
+    match api.rx.try_recv() {
         Ok(message) => match message {
             ApiMessage::AuthenticateFulfilled(token) => {
-                api_resource.token.finish(token);
-                next_auth_state.set(AuthState::Authenticated);
+                api.token.finish(token);
+                auth_state.set(AuthState::Authenticated);
                 events.send(ApiEvent::LoadProfile);
                 events.send(ApiEvent::LoadServers);
             }
             ApiMessage::RegisterFulfilled(token) => {
-                api_resource.token.finish(token);
-                next_auth_state.set(AuthState::Authenticated);
+                api.token.finish(token);
+                auth_state.set(AuthState::Authenticated);
                 events.send(ApiEvent::LoadProfile);
                 events.send(ApiEvent::LoadServers);
             }
             ApiMessage::LoadProfileFulfilled(user) => {
-                api_resource.profile.finish(user);
+                api.profile.finish(user);
             }
             ApiMessage::LoadServersFulfilled(servers) => {
-                api_resource.servers.finish(servers);
+                api.servers.finish(servers);
             }
             ApiMessage::LoadUserFulfilled(user) => {
-                if let Some(loadable) = api_resource.users.get_mut(&user.id) {
+                if let Some(loadable) = api.users.get_mut(&user.id) {
                     loadable.finish(user);
                 }
             }
