@@ -19,7 +19,7 @@ use engine::{
         servers::Server,
         users::{NewUser, User},
     },
-    network::{ClientMessage, ServerMessage},
+    models::network::{ClientMessage, ServerMessage},
     resources::TokioRuntimeResource,
 };
 use std::{
@@ -409,7 +409,7 @@ fn handle_disconnect(client: Res<QuinnetClient>, mut app_exit_event_reader: Even
     for _ in app_exit_event_reader.read() {
         client
             .connection()
-            .send_message(engine::network::ClientMessage::Disconnect)
+            .send_message(engine::models::network::ClientMessage::Disconnect)
             .unwrap();
     }
 }

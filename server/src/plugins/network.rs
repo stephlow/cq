@@ -7,7 +7,7 @@ use bevy_quinnet::{
     },
     shared::channels::ChannelsConfiguration,
 };
-use engine::network::{ClientMessage, ServerMessage};
+use engine::models::network::{ClientMessage, ServerMessage};
 use std::net::{IpAddr, Ipv4Addr};
 
 #[derive(Resource)]
