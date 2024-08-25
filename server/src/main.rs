@@ -76,8 +76,8 @@ async fn main() -> Result<()> {
 
     let args = ServerArgs::parse();
 
-    let port = args.port.clone();
-    let web_port = args.web_port.clone();
+    let port = args.port;
+    let web_port = args.web_port;
 
     let bevy_tx = tx.clone();
 
@@ -93,8 +93,8 @@ async fn main() -> Result<()> {
     });
 
     let api_base_url = args.api_base_url.clone();
-    let addr = args.addr.clone();
-    let port = args.port.clone();
+    let addr = args.addr;
+    let port = args.port;
     let name = args.name.clone();
 
     let api_tx = tx.clone();
@@ -106,7 +106,7 @@ async fn main() -> Result<()> {
         .await
         .unwrap();
 
-        let id = server.id.clone();
+        let id = server.id;
         let mut last_ping = OffsetDateTime::now_utc();
 
         api_tx.send(AppMessage::SetServer(server)).await.unwrap();

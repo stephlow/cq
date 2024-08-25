@@ -38,7 +38,7 @@ pub async fn register_server(
     ConnectInfo(_addr): ConnectInfo<SocketAddr>,
     Json(payload): Json<models::api::servers::RegisterServer>,
 ) -> Json<models::api::servers::Server> {
-    let port: i32 = payload.port.try_into().expect("Invalid port");
+    let port: i32 = payload.port.into();
 
     let server: models::data::servers::Server = query_as(
         "INSERT INTO servers (name, addr, port, last_ping) VALUES ($1, $2, $3, now()) RETURNING *;",

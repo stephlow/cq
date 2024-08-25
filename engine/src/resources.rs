@@ -11,6 +11,12 @@ pub struct TokioRuntimeResource<T> {
     pub receiver: Receiver<T>,
 }
 
+impl<T> Default for TokioRuntimeResource<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<T> TokioRuntimeResource<T> {
     pub fn new() -> Self {
         let (tx, rx) = channel(100);
