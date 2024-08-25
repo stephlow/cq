@@ -133,17 +133,17 @@ fn api_event_handler_system(mut api: ResMut<ApiResource>, mut events: EventReade
                     let password = password.clone();
 
                     api.runtime.spawn(async move {
-                        match authenticate(&api_base_url, &Credentials { username, password }).await
-                        {
-                            Ok(AuthResponse { token }) => tx
-                                .send(ApiMessage::AuthenticateFulfilled(Ok(token)))
+                        let result =
+                            match authenticate(&api_base_url, &Credentials { username, password })
                                 .await
-                                .unwrap(),
-                            Err(_) => tx
-                                .send(ApiMessage::AuthenticateFulfilled(Err(())))
-                                .await
-                                .unwrap(),
-                        }
+                            {
+                                Ok(AuthResponse { token }) => Ok(token),
+                                Err(_) => Err(()),
+                            };
+
+                        tx.send(ApiMessage::AuthenticateFulfilled(result))
+                            .await
+                            .unwrap();
                     });
                 }
             }
@@ -162,7 +162,7 @@ fn api_event_handler_system(mut api: ResMut<ApiResource>, mut events: EventReade
                     let password = password.clone();
 
                     api.runtime.spawn(async move {
-                        match register_user(
+                        let result = match register_user(
                             &api_base_url,
                             NewUser {
                                 username,
@@ -172,15 +172,13 @@ fn api_event_handler_system(mut api: ResMut<ApiResource>, mut events: EventReade
                         )
                         .await
                         {
-                            Ok(AuthResponse { token }) => tx
-                                .send(ApiMessage::RegisterFulfilled(Ok(token)))
-                                .await
-                                .unwrap(),
-                            Err(_) => tx
-                                .send(ApiMessage::RegisterFulfilled(Err(())))
-                                .await
-                                .unwrap(),
-                        }
+                            Ok(AuthResponse { token }) => Ok(token),
+                            Err(_) => Err(()),
+                        };
+
+                        tx.send(ApiMessage::RegisterFulfilled(result))
+                            .await
+                            .unwrap();
                     });
                 }
             }
@@ -194,16 +192,14 @@ fn api_event_handler_system(mut api: ResMut<ApiResource>, mut events: EventReade
                         let token = token.clone();
 
                         api.runtime.spawn(async move {
-                            match get_profile(&api_base_url, &token).await {
-                                Ok(user) => tx
-                                    .send(ApiMessage::LoadProfileFulfilled(Ok(user)))
-                                    .await
-                                    .unwrap(),
-                                Err(_) => tx
-                                    .send(ApiMessage::LoadProfileFulfilled(Err(())))
-                                    .await
-                                    .unwrap(),
-                            }
+                            let result = match get_profile(&api_base_url, &token).await {
+                                Ok(user) => Ok(user),
+                                Err(_) => Err(()),
+                            };
+
+                            tx.send(ApiMessage::LoadProfileFulfilled(result))
+                                .await
+                                .unwrap();
                         });
                     }
                 }
@@ -216,17 +212,14 @@ fn api_event_handler_system(mut api: ResMut<ApiResource>, mut events: EventReade
                     let api_base_url = api.base_url.clone();
 
                     api.runtime.spawn(async move {
-                        match list_servers(&api_base_url).await {
-                            Ok(servers) => {
-                                tx.send(ApiMessage::LoadServersFulfilled(Ok(servers)))
-                                    .await
-                                    .unwrap();
-                            }
-                            Err(_) => tx
-                                .send(ApiMessage::LoadServersFulfilled(Err(())))
-                                .await
-                                .unwrap(),
-                        }
+                        let result = match list_servers(&api_base_url).await {
+                            Ok(servers) => Ok(servers),
+                            Err(_) => Err(()),
+                        };
+
+                        tx.send(ApiMessage::LoadServersFulfilled(result))
+                            .await
+                            .unwrap()
                     });
                 }
             }
@@ -249,16 +242,14 @@ fn api_event_handler_system(mut api: ResMut<ApiResource>, mut events: EventReade
                     let id = *id;
 
                     api.runtime.spawn(async move {
-                        match get_user(&api_base_url, &id).await {
-                            Ok(user) => tx
-                                .send(ApiMessage::LoadUserFulfilled(Ok(user)))
-                                .await
-                                .unwrap(),
-                            Err(_) => tx
-                                .send(ApiMessage::LoadUserFulfilled(Err(id)))
-                                .await
-                                .unwrap(),
-                        }
+                        let result = match get_user(&api_base_url, &id).await {
+                            Ok(user) => Ok(user),
+                            Err(_) => Err(id),
+                        };
+
+                        tx.send(ApiMessage::LoadUserFulfilled(result))
+                            .await
+                            .unwrap()
                     });
                 }
             }
@@ -271,56 +262,58 @@ fn api_message_handler_system(
     mut events: EventWriter<ApiEvent>,
     mut auth_state: ResMut<NextState<AuthState>>,
 ) {
-    if let Ok(message) = api.rx.try_recv() { match message {
-        ApiMessage::AuthenticateFulfilled(result) => match result {
-            Ok(token) => {
-                api.token.finish(token);
-                auth_state.set(AuthState::Authenticated);
-                events.send(ApiEvent::LoadProfile);
-                events.send(ApiEvent::LoadServers);
-            }
-            Err(_) => {
-                api.token.failed();
-            }
-        },
-        ApiMessage::RegisterFulfilled(result) => match result {
-            Ok(token) => {
-                api.token.finish(token);
-                auth_state.set(AuthState::Authenticated);
-                events.send(ApiEvent::LoadProfile);
-                events.send(ApiEvent::LoadServers);
-            }
-            Err(_) => {
-                api.token.failed();
-            }
-        },
-        ApiMessage::LoadProfileFulfilled(result) => match result {
-            Ok(user) => {
-                api.profile.finish(user);
-            }
-            Err(_) => {
-                api.profile.failed();
-            }
-        },
-        ApiMessage::LoadServersFulfilled(result) => match result {
-            Ok(servers) => {
-                api.servers.finish(servers);
-            }
-            Err(_) => {
-                api.servers.failed();
-            }
-        },
-        ApiMessage::LoadUserFulfilled(result) => match result {
-            Ok(user) => {
-                if let Some(loadable) = api.users.get_mut(&user.id) {
-                    loadable.finish(user);
+    if let Ok(message) = api.rx.try_recv() {
+        match message {
+            ApiMessage::AuthenticateFulfilled(result) => match result {
+                Ok(token) => {
+                    api.token.finish(token);
+                    auth_state.set(AuthState::Authenticated);
+                    events.send(ApiEvent::LoadProfile);
+                    events.send(ApiEvent::LoadServers);
                 }
-            }
-            Err(id) => {
-                if let Some(loadable) = api.users.get_mut(&id) {
-                    loadable.failed();
+                Err(_) => {
+                    api.token.failed();
                 }
-            }
-        },
-    } }
+            },
+            ApiMessage::RegisterFulfilled(result) => match result {
+                Ok(token) => {
+                    api.token.finish(token);
+                    auth_state.set(AuthState::Authenticated);
+                    events.send(ApiEvent::LoadProfile);
+                    events.send(ApiEvent::LoadServers);
+                }
+                Err(_) => {
+                    api.token.failed();
+                }
+            },
+            ApiMessage::LoadProfileFulfilled(result) => match result {
+                Ok(user) => {
+                    api.profile.finish(user);
+                }
+                Err(_) => {
+                    api.profile.failed();
+                }
+            },
+            ApiMessage::LoadServersFulfilled(result) => match result {
+                Ok(servers) => {
+                    api.servers.finish(servers);
+                }
+                Err(_) => {
+                    api.servers.failed();
+                }
+            },
+            ApiMessage::LoadUserFulfilled(result) => match result {
+                Ok(user) => {
+                    if let Some(loadable) = api.users.get_mut(&user.id) {
+                        loadable.finish(user);
+                    }
+                }
+                Err(id) => {
+                    if let Some(loadable) = api.users.get_mut(&id) {
+                        loadable.failed();
+                    }
+                }
+            },
+        }
+    }
 }
