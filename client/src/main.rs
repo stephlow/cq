@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 mod plugins;
 
-#[derive(Parser, Debug, Resource)]
+#[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct ClientArgs {
     #[arg(short, long, default_value = "http://localhost:3000")]
@@ -43,14 +43,13 @@ fn main() {
 
     App::new()
         .add_plugins(DefaultPlugins)
-        .add_plugins(ApiPlugin)
+        .add_plugins(ApiPlugin::new(args.api_base_url.clone()))
         .add_plugins(UiPlugin)
         .add_plugins(NetworkPlugin)
         .init_state::<AuthState>()
         .init_state::<ConnectionState>()
         .add_systems(Update, connection_event_handler)
         .add_event::<ClientEvent>()
-        .insert_resource(args)
         .add_systems(Startup, load_servers)
         .run();
 }

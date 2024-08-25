@@ -1,4 +1,4 @@
-use crate::{AuthState, ClientArgs};
+use crate::AuthState;
 use bevy::prelude::*;
 use engine::{
     api_client::{authenticate, get_profile, list_servers, register_user},
@@ -10,11 +10,19 @@ use engine::{
 };
 use tokio::{runtime::Runtime, sync::mpsc};
 
-pub struct ApiPlugin;
+pub struct ApiPlugin {
+    base_url: String,
+}
+
+impl ApiPlugin {
+    pub fn new(base_url: String) -> Self {
+        Self { base_url }
+    }
+}
 
 impl Plugin for ApiPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<ApiResource>()
+        app.insert_resource(ApiResource::new(self.base_url.clone()))
             .add_event::<ApiEvent>()
             .add_systems(Update, api_event_handler_system)
             .add_systems(Update, api_message_handler_system);
@@ -45,6 +53,7 @@ enum ApiMessage {
 
 #[derive(Resource)]
 pub struct ApiResource {
+    base_url: String,
     runtime: Runtime,
     tx: mpsc::Sender<ApiMessage>,
     rx: mpsc::Receiver<ApiMessage>,
@@ -53,8 +62,8 @@ pub struct ApiResource {
     pub servers: LoadableData<Vec<Server>>,
 }
 
-impl Default for ApiResource {
-    fn default() -> Self {
+impl ApiResource {
+    fn new(base_url: String) -> Self {
         let (tx, rx) = mpsc::channel(100);
 
         let runtime = tokio::runtime::Builder::new_multi_thread()
@@ -63,6 +72,7 @@ impl Default for ApiResource {
             .unwrap();
 
         Self {
+            base_url,
             runtime,
             tx,
             rx,
@@ -90,12 +100,10 @@ impl<T> Default for LoadableData<T> {
 
 impl<T> LoadableData<T> {
     fn start(&mut self) {
-        println!("START");
         self.loading = true;
     }
 
     fn finish(&mut self, data: T) {
-        println!("FINISH");
         self.data = Some(data);
         self.loading = true;
     }
@@ -103,7 +111,6 @@ impl<T> LoadableData<T> {
 
 fn api_event_handler_system(
     mut api_resource: ResMut<ApiResource>,
-    client_args: Res<ClientArgs>,
     mut events: EventReader<ApiEvent>,
 ) {
     for event in events.read() {
@@ -113,7 +120,7 @@ fn api_event_handler_system(
                     api_resource.token.start();
 
                     let tx = api_resource.tx.clone();
-                    let api_base_url = client_args.api_base_url.clone();
+                    let api_base_url = api_resource.base_url.clone();
                     let username = username.clone();
                     let password = password.clone();
 
@@ -138,7 +145,7 @@ fn api_event_handler_system(
                     api_resource.token.start();
 
                     let tx = api_resource.tx.clone();
-                    let api_base_url = client_args.api_base_url.clone();
+                    let api_base_url = api_resource.base_url.clone();
                     let username = username.clone();
                     let email = email.clone();
                     let password = password.clone();
@@ -167,7 +174,7 @@ fn api_event_handler_system(
                     api_resource.profile.start();
 
                     let tx = api_resource.tx.clone();
-                    let api_base_url = client_args.api_base_url.clone();
+                    let api_base_url = api_resource.base_url.clone();
                     if let Some(token) = &api_resource.token.data {
                         let token = token.clone();
 
@@ -188,7 +195,7 @@ fn api_event_handler_system(
                     api_resource.servers.start();
 
                     let tx = api_resource.tx.clone();
-                    let api_base_url = client_args.api_base_url.clone();
+                    let api_base_url = api_resource.base_url.clone();
 
                     api_resource.runtime.spawn(async move {
                         match list_servers(&api_base_url).await {
