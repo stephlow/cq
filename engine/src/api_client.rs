@@ -40,6 +40,17 @@ pub async fn get_profile(api_base_url: &str, token: &str) -> Result<User> {
     Ok(user)
 }
 
+pub async fn get_user(api_base_url: &str, id: &Uuid) -> Result<User> {
+    let response = CLIENT
+        .request(Method::GET, format!("{api_base_url}/users/{id}"))
+        .send()
+        .await?;
+
+    let user = response.json::<User>().await.unwrap();
+
+    Ok(user)
+}
+
 pub async fn register_user(api_base_url: &str, new_user: NewUser) -> Result<AuthResponse> {
     let response = CLIENT
         .request(Method::POST, format!("{api_base_url}/users"))

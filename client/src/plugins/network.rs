@@ -15,7 +15,7 @@ use uuid::Uuid;
 
 use crate::{AuthState, ClientEvent, ConnectionState};
 
-use super::api::ApiResource;
+use super::api::{ApiEvent, ApiResource};
 
 pub struct NetworkPlugin;
 
@@ -41,13 +41,18 @@ pub struct ServerInfo {
     pub messages: Vec<(ClientId, String)>,
 }
 
-fn handle_server_messages(mut client: ResMut<QuinnetClient>, mut server_info: ResMut<ServerInfo>) {
+fn handle_server_messages(
+    mut api_events: EventWriter<ApiEvent>,
+    mut client: ResMut<QuinnetClient>,
+    mut server_info: ResMut<ServerInfo>,
+) {
     while let Ok(Some((_channel_id, message))) =
         client.connection_mut().receive_message::<ServerMessage>()
     {
         match message {
             ServerMessage::ClientConnected { client_id, user_id } => {
                 server_info.connected.insert(client_id, user_id);
+                api_events.send(ApiEvent::LoadUser(user_id.clone()));
             }
             ServerMessage::ClientDisconnected { client_id } => {
                 server_info.connected.remove(&client_id);

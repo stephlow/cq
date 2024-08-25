@@ -7,7 +7,7 @@ use dotenvy::dotenv;
 use handlers::{
     auth::{authenticate, profile},
     servers::{list_servers, ping_server, register_server},
-    users::register_user,
+    users::{get_user, register_user},
 };
 use sqlx::postgres::PgPoolOptions;
 use std::{env, net::SocketAddr};
@@ -46,6 +46,7 @@ async fn main() {
         .route("/servers", get(list_servers).post(register_server))
         .route("/servers/:id/ping", post(ping_server))
         .route("/users", post(register_user))
+        .route("/users/:id", get(get_user))
         .layer(Extension(pool))
         .layer(TraceLayer::new_for_http());
 

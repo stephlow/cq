@@ -96,6 +96,7 @@ fn auth_ui_system(
 }
 
 fn server_ui_system(
+    api: Res<ApiResource>,
     mut contexts: EguiContexts,
     mut client_event_writer: EventWriter<ClientEvent>,
     server_info: Res<ServerInfo>,
@@ -109,16 +110,33 @@ fn server_ui_system(
         }
         ui.label("Connected users:");
         for (_client_id, user_id) in server_info.connected.iter() {
-            ui.label(format!("{}", user_id));
+            let mut username = format!("{}", user_id);
+
+            if let Some(loadable) = api.users.get(user_id) {
+                if let Some(user) = &loadable.data {
+                    username = user.username.clone();
+                }
+            }
+
+            ui.label(format!("{}", username));
         }
     });
 
     egui::Window::new("Chat").show(contexts.ctx_mut(), |ui| {
         for (client_id, message) in server_info.messages.iter() {
-            // TODO: Handle properly
+            let mut username = format!("{}", client_id);
+
             if let Some(user_id) = server_info.connected.get(client_id) {
-                ui.label(format!("{}: {}", user_id, message));
+                username = format!("{}", user_id);
+
+                if let Some(loadable) = api.users.get(user_id) {
+                    if let Some(user) = &loadable.data {
+                        username = user.username.clone();
+                    }
+                }
             }
+
+            ui.label(format!("{}: {}", username, message));
         }
 
         ui.text_edit_singleline(&mut chat_input_state.text);

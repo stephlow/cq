@@ -1,7 +1,9 @@
+use std::collections::HashMap;
+
 use crate::AuthState;
 use bevy::prelude::*;
 use engine::{
-    api_client::{authenticate, get_profile, list_servers, register_user},
+    api_client::{authenticate, get_profile, get_user, list_servers, register_user},
     models::api::{
         auth::{AuthResponse, Credentials},
         servers::Server,
@@ -9,6 +11,7 @@ use engine::{
     },
 };
 use tokio::{runtime::Runtime, sync::mpsc};
+use uuid::Uuid;
 
 pub struct ApiPlugin {
     base_url: String,
@@ -42,6 +45,7 @@ pub enum ApiEvent {
     },
     LoadProfile,
     LoadServers,
+    LoadUser(Uuid),
 }
 
 enum ApiMessage {
@@ -49,6 +53,7 @@ enum ApiMessage {
     RegisterFulfilled(String),
     LoadProfileFulfilled(User),
     LoadServersFulfilled(Vec<Server>),
+    LoadUserFulfilled(User),
 }
 
 #[derive(Resource)]
@@ -60,6 +65,7 @@ pub struct ApiResource {
     pub token: LoadableData<String>,
     pub profile: LoadableData<User>,
     pub servers: LoadableData<Vec<Server>>,
+    pub users: HashMap<Uuid, LoadableData<User>>,
 }
 
 impl ApiResource {
@@ -79,6 +85,7 @@ impl ApiResource {
             token: LoadableData::default(),
             profile: LoadableData::default(),
             servers: LoadableData::default(),
+            users: HashMap::new(),
         }
     }
 }
@@ -209,6 +216,34 @@ fn api_event_handler_system(
                     });
                 }
             }
+            ApiEvent::LoadUser(id) => {
+                let loadable = match api_resource.users.get_mut(&id) {
+                    Some(loadable) => loadable,
+                    None => {
+                        api_resource
+                            .users
+                            .insert(id.clone(), LoadableData::default());
+
+                        // Should be safe it's just inserted
+                        api_resource.users.get_mut(&id).unwrap()
+                    }
+                };
+
+                if !loadable.loading {
+                    loadable.start();
+
+                    let tx = api_resource.tx.clone();
+                    let api_base_url = api_resource.base_url.clone();
+                    let id = id.clone();
+
+                    api_resource.runtime.spawn(async move {
+                        match get_user(&api_base_url, &id).await {
+                            Ok(user) => tx.send(ApiMessage::LoadUserFulfilled(user)).await.unwrap(),
+                            Err(_) => {}
+                        }
+                    });
+                }
+            }
         }
     }
 }
@@ -237,6 +272,11 @@ fn api_message_handler_system(
             }
             ApiMessage::LoadServersFulfilled(servers) => {
                 api_resource.servers.finish(servers);
+            }
+            ApiMessage::LoadUserFulfilled(user) => {
+                if let Some(loadable) = api_resource.users.get_mut(&user.id) {
+                    loadable.finish(user);
+                }
             }
         },
         Err(_) => {}
