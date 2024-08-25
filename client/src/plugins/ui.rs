@@ -118,7 +118,7 @@ fn server_ui_system(
                 }
             }
 
-            ui.label(format!("{}", username));
+            ui.label(username.to_string());
         }
     });
 

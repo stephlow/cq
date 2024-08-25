@@ -52,7 +52,7 @@ fn handle_server_messages(
         match message {
             ServerMessage::ClientConnected { client_id, user_id } => {
                 server_info.connected.insert(client_id, user_id);
-                api_events.send(ApiEvent::LoadUser(user_id.clone()));
+                api_events.send(ApiEvent::LoadUser(user_id));
             }
             ServerMessage::ClientDisconnected { client_id } => {
                 server_info.connected.remove(&client_id);

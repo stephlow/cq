@@ -231,13 +231,13 @@ fn api_event_handler_system(mut api: ResMut<ApiResource>, mut events: EventReade
                 }
             }
             ApiEvent::LoadUser(id) => {
-                let loadable = match api.users.get_mut(&id) {
+                let loadable = match api.users.get_mut(id) {
                     Some(loadable) => loadable,
                     None => {
-                        api.users.insert(id.clone(), LoadableData::default());
+                        api.users.insert(*id, LoadableData::default());
 
                         // Should be safe it's just inserted
-                        api.users.get_mut(&id).unwrap()
+                        api.users.get_mut(id).unwrap()
                     }
                 };
 
@@ -246,7 +246,7 @@ fn api_event_handler_system(mut api: ResMut<ApiResource>, mut events: EventReade
 
                     let tx = api.tx.clone();
                     let api_base_url = api.base_url.clone();
-                    let id = id.clone();
+                    let id = *id;
 
                     api.runtime.spawn(async move {
                         match get_user(&api_base_url, &id).await {
@@ -255,7 +255,7 @@ fn api_event_handler_system(mut api: ResMut<ApiResource>, mut events: EventReade
                                 .await
                                 .unwrap(),
                             Err(_) => tx
-                                .send(ApiMessage::LoadUserFulfilled(Err(id.clone())))
+                                .send(ApiMessage::LoadUserFulfilled(Err(id)))
                                 .await
                                 .unwrap(),
                         }
@@ -271,59 +271,56 @@ fn api_message_handler_system(
     mut events: EventWriter<ApiEvent>,
     mut auth_state: ResMut<NextState<AuthState>>,
 ) {
-    match api.rx.try_recv() {
-        Ok(message) => match message {
-            ApiMessage::AuthenticateFulfilled(result) => match result {
-                Ok(token) => {
-                    api.token.finish(token);
-                    auth_state.set(AuthState::Authenticated);
-                    events.send(ApiEvent::LoadProfile);
-                    events.send(ApiEvent::LoadServers);
-                }
-                Err(_) => {
-                    api.token.failed();
-                }
-            },
-            ApiMessage::RegisterFulfilled(result) => match result {
-                Ok(token) => {
-                    api.token.finish(token);
-                    auth_state.set(AuthState::Authenticated);
-                    events.send(ApiEvent::LoadProfile);
-                    events.send(ApiEvent::LoadServers);
-                }
-                Err(_) => {
-                    api.token.failed();
-                }
-            },
-            ApiMessage::LoadProfileFulfilled(result) => match result {
-                Ok(user) => {
-                    api.profile.finish(user);
-                }
-                Err(_) => {
-                    api.profile.failed();
-                }
-            },
-            ApiMessage::LoadServersFulfilled(result) => match result {
-                Ok(servers) => {
-                    api.servers.finish(servers);
-                }
-                Err(_) => {
-                    api.servers.failed();
-                }
-            },
-            ApiMessage::LoadUserFulfilled(result) => match result {
-                Ok(user) => {
-                    if let Some(loadable) = api.users.get_mut(&user.id) {
-                        loadable.finish(user);
-                    }
-                }
-                Err(id) => {
-                    if let Some(loadable) = api.users.get_mut(&id) {
-                        loadable.failed();
-                    }
-                }
-            },
+    if let Ok(message) = api.rx.try_recv() { match message {
+        ApiMessage::AuthenticateFulfilled(result) => match result {
+            Ok(token) => {
+                api.token.finish(token);
+                auth_state.set(AuthState::Authenticated);
+                events.send(ApiEvent::LoadProfile);
+                events.send(ApiEvent::LoadServers);
+            }
+            Err(_) => {
+                api.token.failed();
+            }
         },
-        Err(_) => {}
-    }
+        ApiMessage::RegisterFulfilled(result) => match result {
+            Ok(token) => {
+                api.token.finish(token);
+                auth_state.set(AuthState::Authenticated);
+                events.send(ApiEvent::LoadProfile);
+                events.send(ApiEvent::LoadServers);
+            }
+            Err(_) => {
+                api.token.failed();
+            }
+        },
+        ApiMessage::LoadProfileFulfilled(result) => match result {
+            Ok(user) => {
+                api.profile.finish(user);
+            }
+            Err(_) => {
+                api.profile.failed();
+            }
+        },
+        ApiMessage::LoadServersFulfilled(result) => match result {
+            Ok(servers) => {
+                api.servers.finish(servers);
+            }
+            Err(_) => {
+                api.servers.failed();
+            }
+        },
+        ApiMessage::LoadUserFulfilled(result) => match result {
+            Ok(user) => {
+                if let Some(loadable) = api.users.get_mut(&user.id) {
+                    loadable.finish(user);
+                }
+            }
+            Err(id) => {
+                if let Some(loadable) = api.users.get_mut(&id) {
+                    loadable.failed();
+                }
+            }
+        },
+    } }
 }
