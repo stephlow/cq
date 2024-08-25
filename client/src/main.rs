@@ -2,16 +2,12 @@ use bevy::prelude::*;
 use bevy_quinnet::client::{connection::ConnectionEvent, QuinnetClient};
 use clap::Parser;
 use engine::{
-    api_client::list_servers,
-    models::{
-        api::{servers::Server, users::User},
-        network::ClientMessage,
-    },
+    models::{api::users::User, network::ClientMessage},
     resources::TokioRuntimeResource,
 };
 use plugins::{
     api::{ApiEvent, ApiPlugin},
-    network::{NetworkPlugin, ServerBrowser},
+    network::NetworkPlugin,
     ui::UiPlugin,
 };
 use uuid::Uuid;
@@ -53,7 +49,6 @@ enum ClientEvent {
 
 enum TokioClientMessage {
     Authenticated { token: String, user: User },
-    LoadServers(Vec<Server>),
 }
 
 fn main() {
@@ -94,7 +89,6 @@ fn connection_event_handler(
 }
 
 fn tokio_receiver_system(
-    mut server_browser_resource: ResMut<ServerBrowser>,
     mut tokio_runtime_resource: ResMut<TokioRuntimeResource<TokioClientMessage>>,
     mut next_auth_state: ResMut<NextState<AuthState>>,
     mut auth_info: ResMut<AuthInfo>,
@@ -106,29 +100,10 @@ fn tokio_receiver_system(
                 auth_info.user = Some(user);
                 next_auth_state.set(AuthState::Authenticated);
             }
-            TokioClientMessage::LoadServers(server) => {
-                server_browser_resource.servers = Some(server);
-            }
         }
     }
 }
 
-fn load_servers(
-    mut api_events: EventWriter<ApiEvent>,
-    client_args: Res<ClientArgs>,
-    tokio: Res<TokioRuntimeResource<TokioClientMessage>>,
-) {
+fn load_servers(mut api_events: EventWriter<ApiEvent>) {
     api_events.send(ApiEvent::LoadServers);
-    let api_base_url = client_args.api_base_url.clone();
-    let tx = tokio.sender.clone();
-
-    tokio.runtime.spawn(async move {
-        match list_servers(&api_base_url).await {
-            Ok(servers) => tx
-                .send(TokioClientMessage::LoadServers(servers))
-                .await
-                .unwrap(),
-            Err(error) => error!(error = ?error, "Load servers"),
-        }
-    });
 }

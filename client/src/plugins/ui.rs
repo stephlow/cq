@@ -1,4 +1,4 @@
-use super::network::{ServerBrowser, ServerInfo};
+use super::{api::ApiResource, network::ServerInfo};
 use crate::{AuthInfo, AuthState, ClientArgs, ClientEvent, ConnectionState, TokioClientMessage};
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts, EguiPlugin};
@@ -177,8 +177,8 @@ fn server_ui_system(
 }
 
 fn server_browser_ui_system(
+    api: Res<ApiResource>,
     mut contexts: EguiContexts,
-    server_browser_resource: Res<ServerBrowser>,
     mut client_event_writer: EventWriter<ClientEvent>,
     auth_info: Res<AuthInfo>,
 ) {
@@ -187,7 +187,7 @@ fn server_browser_ui_system(
             ui.label(format!("user_id: {}", user.id));
         }
 
-        if let Some(servers) = &server_browser_resource.servers {
+        if let Some(servers) = &api.servers.data {
             for server in servers.iter() {
                 ui.label(format!("Server name: {}:{}", server.name, server.port));
                 ui.label(server.addr.to_string());

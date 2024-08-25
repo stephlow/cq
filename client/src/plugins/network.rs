@@ -6,10 +6,7 @@ use bevy_quinnet::{
     },
     shared::{channels::ChannelsConfiguration, ClientId},
 };
-use engine::models::{
-    api::servers::Server,
-    network::{ClientMessage, ServerMessage},
-};
+use engine::models::network::{ClientMessage, ServerMessage};
 use std::{
     collections::HashMap,
     net::{IpAddr, Ipv4Addr},
@@ -18,12 +15,13 @@ use uuid::Uuid;
 
 use crate::{AuthState, ClientEvent, ConnectionState};
 
+use super::api::ApiResource;
+
 pub struct NetworkPlugin;
 
 impl Plugin for NetworkPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(QuinnetClientPlugin::default())
-            .init_resource::<ServerBrowser>()
             .init_resource::<ServerInfo>()
             .add_systems(Update, event_system)
             .add_systems(Last, handle_disconnect)
@@ -34,11 +32,6 @@ impl Plugin for NetworkPlugin {
                     .run_if(in_state(ConnectionState::Connected)),
             );
     }
-}
-
-#[derive(Default, Resource)]
-pub struct ServerBrowser {
-    pub servers: Option<Vec<Server>>,
 }
 
 #[derive(Default, Resource)]
@@ -67,7 +60,7 @@ fn handle_server_messages(mut client: ResMut<QuinnetClient>, mut server_info: Re
 }
 
 fn event_system(
-    server_browser_resource: Res<ServerBrowser>,
+    api: Res<ApiResource>,
     mut client_event_reader: EventReader<ClientEvent>,
     mut client: ResMut<QuinnetClient>,
     mut next_connection_state: ResMut<NextState<ConnectionState>>,
@@ -76,7 +69,7 @@ fn event_system(
     for event in client_event_reader.read() {
         match event {
             ClientEvent::Connect(id) => {
-                if let Some(servers) = &server_browser_resource.servers {
+                if let Some(servers) = &api.servers.data {
                     if let Some(server) = servers.iter().find(|server| &server.id == id) {
                         client
                             .open_connection(
