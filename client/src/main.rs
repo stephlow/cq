@@ -5,6 +5,7 @@ use engine::models::network::ClientMessage;
 use plugins::{
     api::{ApiPlugin, ApiResource},
     network::NetworkPlugin,
+    render::RenderPlugin,
     ui::UiPlugin,
 };
 use uuid::Uuid;
@@ -50,6 +51,7 @@ fn main() {
         .init_state::<ConnectionState>()
         .add_systems(Update, connection_event_handler)
         .add_event::<ClientEvent>()
+        .add_plugins(RenderPlugin)
         .run();
 }
 
