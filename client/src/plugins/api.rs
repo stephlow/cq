@@ -52,7 +52,7 @@ enum ApiMessage {
     RegisterFulfilled(Result<String, ()>),
     LoadProfileFulfilled(Result<User, ()>),
     LoadServersFulfilled(Result<Vec<Server>, ()>),
-    LoadUserFulfilled(Result<User, Uuid>),
+    LoadUserFulfilled((Uuid, Result<User, ()>)),
 }
 
 #[derive(Resource)]
@@ -244,10 +244,10 @@ fn api_event_handler_system(mut api: ResMut<ApiResource>, mut events: EventReade
                     api.runtime.spawn(async move {
                         let result = match get_user(&api_base_url, &id).await {
                             Ok(user) => Ok(user),
-                            Err(_) => Err(id),
+                            Err(_) => Err(()),
                         };
 
-                        tx.send(ApiMessage::LoadUserFulfilled(result))
+                        tx.send(ApiMessage::LoadUserFulfilled((id, result)))
                             .await
                             .unwrap()
                     });
@@ -302,13 +302,13 @@ fn api_message_handler_system(
                     api.servers.failed();
                 }
             },
-            ApiMessage::LoadUserFulfilled(result) => match result {
+            ApiMessage::LoadUserFulfilled((id, result)) => match result {
                 Ok(user) => {
                     if let Some(loadable) = api.users.get_mut(&user.id) {
                         loadable.finish(user);
                     }
                 }
-                Err(id) => {
+                Err(_) => {
                     if let Some(loadable) = api.users.get_mut(&id) {
                         loadable.failed();
                     }
