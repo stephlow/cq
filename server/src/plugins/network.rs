@@ -73,19 +73,17 @@ fn handle_client_messages(
                         PlayerPosition(Vec3::new(0., 0., 0.)),
                     ));
 
-                    app_state.connections.insert(client_id, user_id);
-
                     endpoint
                         .broadcast_message(ServerMessage::ClientConnected { client_id, user_id })
                         .unwrap();
 
-                    for (user_client_id, user_id) in app_state.connections.iter() {
+                    for (_, player, _) in players.into_iter() {
                         endpoint
                             .send_message(
                                 client_id,
                                 ServerMessage::ClientConnected {
-                                    client_id: *user_client_id,
-                                    user_id: *user_id,
+                                    client_id: player.client_id,
+                                    user_id: player.user_id,
                                 },
                             )
                             .unwrap();
@@ -97,15 +95,12 @@ fn handle_client_messages(
                         .find(|(_, player, _)| player.client_id == client_id)
                     {
                         commands.entity(entity).despawn();
+                        endpoint
+                            .broadcast_message(ServerMessage::ClientDisconnected { client_id })
+                            .unwrap();
+
+                        endpoint.disconnect_client(client_id).unwrap();
                     }
-
-                    app_state.connections.remove(&client_id);
-
-                    endpoint
-                        .broadcast_message(ServerMessage::ClientDisconnected { client_id })
-                        .unwrap();
-
-                    endpoint.disconnect_client(client_id).unwrap();
                 }
                 ClientMessage::ChatMessage { message } => {
                     endpoint

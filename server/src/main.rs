@@ -4,6 +4,7 @@ use bevy_quinnet::shared::ClientId;
 use clap::{arg, Parser};
 use engine::{
     api_client::{ping_server, register_server},
+    components::player::Player,
     models::api::servers::Server,
 };
 use futures::future::join_all;
@@ -45,13 +46,12 @@ struct ServerArgs {
 enum AppMessage {
     SetServer(Server),
     GetServer(oneshot::Sender<Option<Server>>),
-    GetConnections(oneshot::Sender<HashMap<ClientId, Uuid>>),
+    GetPlayers(oneshot::Sender<Vec<Uuid>>),
 }
 
 #[derive(Resource)]
 struct AppState {
     server: Option<Server>,
-    connections: HashMap<ClientId, Uuid>,
     tx: mpsc::Sender<AppMessage>,
     rx: mpsc::Receiver<AppMessage>,
 }
@@ -60,7 +60,6 @@ impl AppState {
     fn new(tx: mpsc::Sender<AppMessage>, rx: mpsc::Receiver<AppMessage>) -> Self {
         Self {
             server: None,
-            connections: HashMap::new(),
             tx,
             rx,
         }
@@ -141,17 +140,18 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-fn app_message_system(mut state: ResMut<AppState>) {
+fn app_message_system(players: Query<&Player>, mut state: ResMut<AppState>) {
     if let Ok(message) = state.rx.try_recv() {
         match message {
             AppMessage::SetServer(server) => {
                 state.server = Some(server);
             }
-            AppMessage::GetConnections(tx) => {
-                tx.send(state.connections.clone()).unwrap();
-            }
             AppMessage::GetServer(tx) => {
                 tx.send(state.server.clone()).unwrap();
+            }
+            AppMessage::GetPlayers(tx) => {
+                let ids = players.into_iter().map(|player| player.user_id).collect();
+                tx.send(ids).unwrap();
             }
         }
     }
