@@ -15,7 +15,10 @@ use uuid::Uuid;
 
 use crate::{AuthState, ClientEvent, ConnectionState};
 
-use super::api::{ApiEvent, ApiResource};
+use super::{
+    api::{ApiEvent, ApiResource},
+    render::RenderEvent,
+};
 
 pub struct NetworkPlugin;
 
@@ -45,6 +48,7 @@ fn handle_server_messages(
     mut api_events: EventWriter<ApiEvent>,
     mut client: ResMut<QuinnetClient>,
     mut server_info: ResMut<ServerInfo>,
+    mut render_events: EventWriter<RenderEvent>,
 ) {
     while let Ok(Some((_channel_id, message))) =
         client.connection_mut().receive_message::<ServerMessage>()
@@ -53,12 +57,23 @@ fn handle_server_messages(
             ServerMessage::ClientConnected { client_id, user_id } => {
                 server_info.connected.insert(client_id, user_id);
                 api_events.send(ApiEvent::LoadUser(user_id));
+                render_events.send(RenderEvent::Spawn { client_id, user_id });
             }
             ServerMessage::ClientDisconnected { client_id } => {
                 server_info.connected.remove(&client_id);
+                render_events.send(RenderEvent::Despawn(client_id));
             }
             ServerMessage::ChatMessage { client_id, message } => {
                 server_info.messages.push((client_id, message));
+            }
+            ServerMessage::UpdatePosition {
+                client_id,
+                position,
+            } => {
+                render_events.send(RenderEvent::UpdatePosition {
+                    client_id,
+                    position,
+                });
             }
         }
     }

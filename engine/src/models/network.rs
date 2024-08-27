@@ -1,3 +1,4 @@
+use bevy::math::Vec3;
 use bevy_quinnet::shared::ClientId;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -7,6 +8,7 @@ pub enum ClientMessage {
     Join { user_id: Uuid },
     Disconnect,
     ChatMessage { message: String },
+    UpdatePosition { position: Vec3 },
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -21,5 +23,9 @@ pub enum ServerMessage {
     ChatMessage {
         client_id: ClientId,
         message: String,
+    },
+    UpdatePosition {
+        client_id: ClientId,
+        position: Vec3,
     },
 }

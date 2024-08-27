@@ -7,8 +7,14 @@ use bevy_quinnet::{
     },
     shared::channels::ChannelsConfiguration,
 };
-use engine::models::network::{ClientMessage, ServerMessage};
+use engine::{
+    components::player::Player,
+    models::network::{ClientMessage, ServerMessage},
+};
 use std::net::{IpAddr, Ipv4Addr};
+
+#[derive(Component)]
+struct PlayerPosition(Vec3);
 
 #[derive(Resource)]
 pub struct ServerConfig {
@@ -49,7 +55,12 @@ fn start_listening(server_config: Res<ServerConfig>, mut server: ResMut<QuinnetS
         .unwrap();
 }
 
-fn handle_client_messages(mut server: ResMut<QuinnetServer>, mut app_state: ResMut<AppState>) {
+fn handle_client_messages(
+    mut players: Query<(Entity, &Player, &mut PlayerPosition)>,
+    mut commands: Commands,
+    mut server: ResMut<QuinnetServer>,
+    mut app_state: ResMut<AppState>,
+) {
     let endpoint = server.endpoint_mut();
     for client_id in endpoint.clients() {
         while let Some((_channel_id, message)) =
@@ -57,6 +68,11 @@ fn handle_client_messages(mut server: ResMut<QuinnetServer>, mut app_state: ResM
         {
             match message {
                 ClientMessage::Join { user_id } => {
+                    commands.spawn((
+                        Player { client_id, user_id },
+                        PlayerPosition(Vec3::new(0., 0., 0.)),
+                    ));
+
                     app_state.connections.insert(client_id, user_id);
 
                     endpoint
@@ -76,6 +92,13 @@ fn handle_client_messages(mut server: ResMut<QuinnetServer>, mut app_state: ResM
                     }
                 }
                 ClientMessage::Disconnect {} => {
+                    if let Some((entity, _, _)) = players
+                        .iter()
+                        .find(|(_, player, _)| player.client_id == client_id)
+                    {
+                        commands.entity(entity).despawn();
+                    }
+
                     app_state.connections.remove(&client_id);
 
                     endpoint
@@ -88,6 +111,21 @@ fn handle_client_messages(mut server: ResMut<QuinnetServer>, mut app_state: ResM
                     endpoint
                         .broadcast_message(ServerMessage::ChatMessage { client_id, message })
                         .unwrap();
+                }
+                ClientMessage::UpdatePosition { position } => {
+                    if let Some((_, _, mut player_position)) = players
+                        .iter_mut()
+                        .find(|(_, player, _)| player.client_id == client_id)
+                    {
+                        player_position.0 = position;
+
+                        endpoint
+                            .broadcast_message(ServerMessage::UpdatePosition {
+                                client_id,
+                                position,
+                            })
+                            .unwrap();
+                    }
                 }
             }
         }
