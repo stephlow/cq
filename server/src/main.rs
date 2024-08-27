@@ -1,6 +1,5 @@
 use anyhow::Result;
 use bevy::{app::ScheduleRunnerPlugin, log::tracing_subscriber, prelude::*};
-use bevy_quinnet::shared::ClientId;
 use clap::{arg, Parser};
 use engine::{
     api_client::{ping_server, register_server},
@@ -9,7 +8,7 @@ use engine::{
 };
 use futures::future::join_all;
 use plugins::network::NetworkPlugin;
-use std::{collections::HashMap, net::IpAddr, time::Duration};
+use std::{net::IpAddr, time::Duration};
 use time::OffsetDateTime;
 use tokio::{
     sync::{mpsc, oneshot},

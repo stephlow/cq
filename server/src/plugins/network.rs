@@ -1,4 +1,3 @@
-use crate::AppState;
 use bevy::prelude::*;
 use bevy_quinnet::{
     server::{
@@ -59,7 +58,6 @@ fn handle_client_messages(
     mut players: Query<(Entity, &Player, &mut PlayerPosition)>,
     mut commands: Commands,
     mut server: ResMut<QuinnetServer>,
-    mut app_state: ResMut<AppState>,
 ) {
     let endpoint = server.endpoint_mut();
     for client_id in endpoint.clients() {
