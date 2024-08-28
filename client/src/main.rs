@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy_quinnet::client::{connection::ConnectionEvent, QuinnetClient};
 use clap::Parser;
-use engine::models::network::ClientMessage;
+use engine::{models::network::ClientMessage, plugins::movement::MovementPlugin};
 use plugins::{
     api::{ApiPlugin, ApiResource},
     controller::ControllerPlugin,
@@ -54,6 +54,7 @@ fn main() {
         .add_event::<ClientEvent>()
         .add_plugins(RenderPlugin)
         .add_plugins(ControllerPlugin)
+        .add_plugins(MovementPlugin)
         .run();
 }
 

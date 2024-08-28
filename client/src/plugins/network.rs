@@ -75,6 +75,15 @@ fn handle_server_messages(
                     position,
                 });
             }
+            ServerMessage::SendModifier {
+                client_id,
+                key_code,
+            } => {
+                render_events.send(RenderEvent::UpdateMovement {
+                    client_id,
+                    modifier: key_code,
+                });
+            }
         }
     }
 }

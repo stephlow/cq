@@ -1,9 +1,14 @@
-use crate::ConnectionState;
-
 use super::api::ApiResource;
+use crate::ConnectionState;
 use bevy::prelude::*;
 use bevy_quinnet::client::QuinnetClient;
-use engine::{components::player::Player, models::network::ClientMessage};
+use engine::{
+    components::{
+        movement::{MoveModifier, Movement},
+        player::Player,
+    },
+    models::network::ClientMessage,
+};
 
 pub struct ControllerPlugin;
 
@@ -17,44 +22,77 @@ impl Plugin for ControllerPlugin {
 }
 
 fn keyboard_input(
-    players: Query<(&Player, &Transform)>,
+    mut players: Query<(&Player, &Transform, &mut Movement)>,
     api: Res<ApiResource>,
     keys: Res<ButtonInput<KeyCode>>,
     client: ResMut<QuinnetClient>,
 ) {
     if let Some(user) = &api.profile.data {
-        if let Some((_, transform)) = players.iter().find(|(player, _)| player.user_id == user.id) {
-            if keys.pressed(KeyCode::KeyW) {
-                let mut position = transform.translation;
-                position.x += 0.1;
-
+        if let Some((_, _, mut movement)) = players
+            .iter_mut()
+            .find(|(player, _, _)| player.user_id == user.id)
+        {
+            if keys.just_pressed(KeyCode::KeyW) {
+                let modifier = MoveModifier::StartForward;
+                movement.modify(modifier.clone());
                 client
                     .connection()
-                    .send_message(ClientMessage::UpdatePosition { position })
+                    .send_message(ClientMessage::SendModifier(modifier))
                     .unwrap();
-            } else if keys.pressed(KeyCode::KeyS) {
-                let mut position = transform.translation;
-                position.x -= 0.1;
-
+            } else if keys.just_released(KeyCode::KeyW) {
+                let modifier = MoveModifier::StopForward;
+                movement.modify(modifier.clone());
                 client
                     .connection()
-                    .send_message(ClientMessage::UpdatePosition { position })
+                    .send_message(ClientMessage::SendModifier(modifier))
                     .unwrap();
-            } else if keys.pressed(KeyCode::KeyA) {
-                let mut position = transform.translation;
-                position.z += 0.1;
+            }
 
+            if keys.just_pressed(KeyCode::KeyS) {
+                let modifier = MoveModifier::StartBackward;
+                movement.modify(modifier.clone());
                 client
                     .connection()
-                    .send_message(ClientMessage::UpdatePosition { position })
+                    .send_message(ClientMessage::SendModifier(modifier))
                     .unwrap();
-            } else if keys.pressed(KeyCode::KeyD) {
-                let mut position = transform.translation;
-                position.z -= 0.1;
-
+            } else if keys.just_released(KeyCode::KeyS) {
+                let modifier = MoveModifier::StopBackward;
+                movement.modify(modifier.clone());
                 client
                     .connection()
-                    .send_message(ClientMessage::UpdatePosition { position })
+                    .send_message(ClientMessage::SendModifier(modifier))
+                    .unwrap();
+            }
+
+            if keys.just_pressed(KeyCode::KeyD) {
+                let modifier = MoveModifier::StartRight;
+                movement.modify(modifier.clone());
+                client
+                    .connection()
+                    .send_message(ClientMessage::SendModifier(modifier))
+                    .unwrap();
+            } else if keys.just_released(KeyCode::KeyD) {
+                let modifier = MoveModifier::StopRight;
+                movement.modify(modifier.clone());
+                client
+                    .connection()
+                    .send_message(ClientMessage::SendModifier(modifier))
+                    .unwrap();
+            }
+
+            if keys.just_pressed(KeyCode::KeyA) {
+                let modifier = MoveModifier::StartLeft;
+                movement.modify(modifier.clone());
+                client
+                    .connection()
+                    .send_message(ClientMessage::SendModifier(modifier))
+                    .unwrap();
+            } else if keys.just_released(KeyCode::KeyA) {
+                let modifier = MoveModifier::StopLeft;
+                movement.modify(modifier.clone());
+                client
+                    .connection()
+                    .send_message(ClientMessage::SendModifier(modifier))
                     .unwrap();
             }
         }

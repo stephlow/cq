@@ -3,8 +3,9 @@ use bevy::{app::ScheduleRunnerPlugin, log::tracing_subscriber, prelude::*};
 use clap::{arg, Parser};
 use engine::{
     api_client::{ping_server, register_server},
-    components::player::Player,
+    components::player::{Player, PlayerPosition},
     models::api::servers::Server,
+    plugins::movement::MovementPlugin,
 };
 use futures::future::join_all;
 use plugins::network::NetworkPlugin;
@@ -45,7 +46,7 @@ struct ServerArgs {
 enum AppMessage {
     SetServer(Server),
     GetServer(oneshot::Sender<Option<Server>>),
-    GetPlayers(oneshot::Sender<Vec<Uuid>>),
+    GetPlayers(oneshot::Sender<Vec<(Uuid, Vec3)>>),
 }
 
 #[derive(Resource)]
@@ -87,6 +88,7 @@ async fn main() -> Result<()> {
             )))
             .insert_resource(AppState::new(bevy_tx, rx))
             .add_plugins(NetworkPlugin::new(port))
+            .add_plugins(MovementPlugin)
             .add_systems(Update, app_message_system)
             .run();
     });
@@ -139,7 +141,7 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-fn app_message_system(players: Query<&Player>, mut state: ResMut<AppState>) {
+fn app_message_system(players: Query<(&Player, &PlayerPosition)>, mut state: ResMut<AppState>) {
     if let Ok(message) = state.rx.try_recv() {
         match message {
             AppMessage::SetServer(server) => {
@@ -149,7 +151,11 @@ fn app_message_system(players: Query<&Player>, mut state: ResMut<AppState>) {
                 tx.send(state.server.clone()).unwrap();
             }
             AppMessage::GetPlayers(tx) => {
-                let ids = players.into_iter().map(|player| player.user_id).collect();
+                let ids = players
+                    .into_iter()
+                    .map(|(player, position)| (player.user_id, position.0))
+                    .collect();
+
                 tx.send(ids).unwrap();
             }
         }

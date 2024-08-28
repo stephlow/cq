@@ -7,13 +7,13 @@ use bevy_quinnet::{
     shared::channels::ChannelsConfiguration,
 };
 use engine::{
-    components::player::Player,
+    components::{
+        movement::Movement,
+        player::{Player, PlayerPosition},
+    },
     models::network::{ClientMessage, ServerMessage},
 };
 use std::net::{IpAddr, Ipv4Addr};
-
-#[derive(Component)]
-struct PlayerPosition(Vec3);
 
 #[derive(Resource)]
 pub struct ServerConfig {
@@ -55,7 +55,7 @@ fn start_listening(server_config: Res<ServerConfig>, mut server: ResMut<QuinnetS
 }
 
 fn handle_client_messages(
-    mut players: Query<(Entity, &Player, &mut PlayerPosition)>,
+    mut players: Query<(Entity, &Player, &mut PlayerPosition, &mut Movement)>,
     mut commands: Commands,
     mut server: ResMut<QuinnetServer>,
 ) {
@@ -68,14 +68,15 @@ fn handle_client_messages(
                 ClientMessage::Join { user_id } => {
                     commands.spawn((
                         Player { client_id, user_id },
-                        PlayerPosition(Vec3::new(0., 0., 0.)),
+                        PlayerPosition::default(),
+                        Movement::default(),
                     ));
 
                     endpoint
                         .broadcast_message(ServerMessage::ClientConnected { client_id, user_id })
                         .unwrap();
 
-                    for (_, player, _) in players.into_iter() {
+                    for (_, player, _, _) in players.into_iter() {
                         endpoint
                             .send_message(
                                 client_id,
@@ -88,9 +89,9 @@ fn handle_client_messages(
                     }
                 }
                 ClientMessage::Disconnect {} => {
-                    if let Some((entity, _, _)) = players
+                    if let Some((entity, _, _, _)) = players
                         .iter()
-                        .find(|(_, player, _)| player.client_id == client_id)
+                        .find(|(_, player, _, _)| player.client_id == client_id)
                     {
                         commands.entity(entity).despawn();
                         endpoint
@@ -106,9 +107,9 @@ fn handle_client_messages(
                         .unwrap();
                 }
                 ClientMessage::UpdatePosition { position } => {
-                    if let Some((_, _, mut player_position)) = players
+                    if let Some((_, _, mut player_position, _)) = players
                         .iter_mut()
-                        .find(|(_, player, _)| player.client_id == client_id)
+                        .find(|(_, player, _, _)| player.client_id == client_id)
                     {
                         player_position.0 = position;
 
@@ -118,6 +119,14 @@ fn handle_client_messages(
                                 position,
                             })
                             .unwrap();
+                    }
+                }
+                ClientMessage::SendModifier(modifier) => {
+                    if let Some((_, _, _, mut movement)) = players
+                        .iter_mut()
+                        .find(|(_, player, _, _)| player.client_id == client_id)
+                    {
+                        movement.modify(modifier);
                     }
                 }
             }
