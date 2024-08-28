@@ -13,11 +13,15 @@ use engine::{
     },
     models::network::{ClientMessage, ServerMessage},
 };
-use std::net::{IpAddr, Ipv4Addr};
+use std::{
+    net::{IpAddr, Ipv4Addr},
+    time::Duration,
+};
 
 #[derive(Resource)]
 pub struct ServerConfig {
     port: u16,
+    broadcast_timer: Timer,
 }
 
 pub struct NetworkPlugin {
@@ -32,11 +36,14 @@ impl NetworkPlugin {
 
 impl Plugin for NetworkPlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(ServerConfig { port: self.port })
-            .add_plugins(QuinnetServerPlugin::default())
-            .add_systems(Startup, start_listening)
-            .add_systems(Update, handle_client_messages)
-            .add_systems(Update, broadcast_positions);
+        app.insert_resource(ServerConfig {
+            port: self.port,
+            broadcast_timer: Timer::new(Duration::from_millis(10), TimerMode::Repeating),
+        })
+        .add_plugins(QuinnetServerPlugin::default())
+        .add_systems(Startup, start_listening)
+        .add_systems(Update, handle_client_messages)
+        .add_systems(Update, broadcast_positions);
     }
 }
 
@@ -145,15 +152,19 @@ fn handle_client_messages(
 fn broadcast_positions(
     players: Query<(&Player, &PlayerPosition)>,
     mut server: ResMut<QuinnetServer>,
+    time: Res<Time>,
+    mut config: ResMut<ServerConfig>,
 ) {
-    // TODO: Should not run on every tick
-    let endpoint = server.endpoint_mut();
-    for (player, position) in players.iter() {
-        endpoint
-            .broadcast_message(ServerMessage::UpdatePosition {
-                client_id: player.client_id,
-                position: position.0,
-            })
-            .unwrap()
+    config.broadcast_timer.tick(time.delta());
+    if config.broadcast_timer.finished() {
+        let endpoint = server.endpoint_mut();
+        for (player, position) in players.iter() {
+            endpoint
+                .broadcast_message(ServerMessage::UpdatePosition {
+                    client_id: player.client_id,
+                    position: position.0,
+                })
+                .unwrap()
+        }
     }
 }
