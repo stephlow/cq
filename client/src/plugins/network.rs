@@ -77,7 +77,7 @@ fn handle_server_messages(
             }
             ServerMessage::SendModifier {
                 client_id,
-                key_code,
+                modifier: key_code,
             } => {
                 render_events.send(RenderEvent::UpdateMovement {
                     client_id,

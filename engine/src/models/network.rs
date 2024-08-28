@@ -33,6 +33,6 @@ pub enum ServerMessage {
     },
     SendModifier {
         client_id: ClientId,
-        key_code: MoveModifier,
+        modifier: MoveModifier,
     },
 }

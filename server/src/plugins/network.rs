@@ -126,7 +126,14 @@ fn handle_client_messages(
                         .iter_mut()
                         .find(|(_, player, _, _)| player.client_id == client_id)
                     {
-                        movement.modify(modifier);
+                        movement.modify(modifier.clone());
+
+                        endpoint
+                            .broadcast_message(ServerMessage::SendModifier {
+                                client_id,
+                                modifier,
+                            })
+                            .unwrap();
                     }
                 }
             }
