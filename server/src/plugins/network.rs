@@ -35,7 +35,8 @@ impl Plugin for NetworkPlugin {
         app.insert_resource(ServerConfig { port: self.port })
             .add_plugins(QuinnetServerPlugin::default())
             .add_systems(Startup, start_listening)
-            .add_systems(Update, handle_client_messages);
+            .add_systems(Update, handle_client_messages)
+            .add_systems(Update, broadcast_positions);
     }
 }
 
@@ -138,5 +139,21 @@ fn handle_client_messages(
                 }
             }
         }
+    }
+}
+
+fn broadcast_positions(
+    players: Query<(&Player, &PlayerPosition)>,
+    mut server: ResMut<QuinnetServer>,
+) {
+    // TODO: Should not run on every tick
+    let endpoint = server.endpoint_mut();
+    for (player, position) in players.iter() {
+        endpoint
+            .broadcast_message(ServerMessage::UpdatePosition {
+                client_id: player.client_id,
+                position: position.0,
+            })
+            .unwrap()
     }
 }
