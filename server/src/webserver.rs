@@ -5,7 +5,7 @@ use tokio::sync::mpsc;
 pub fn create_router(tx: mpsc::Sender<AppMessage>) -> Router {
     Router::new()
         .route("/", get(get_server))
-        .route("/connections", get(get_connections))
+        .route("/players", get(get_players))
         .layer(Extension(tx))
 }
 
@@ -21,12 +21,12 @@ async fn get_server(Extension(tx): Extension<mpsc::Sender<AppMessage>>) -> impl 
 }
 
 #[axum::debug_handler]
-async fn get_connections(Extension(tx): Extension<mpsc::Sender<AppMessage>>) -> impl IntoResponse {
+async fn get_players(Extension(tx): Extension<mpsc::Sender<AppMessage>>) -> impl IntoResponse {
     let (resp_tx, resp_rx) = tokio::sync::oneshot::channel();
 
-    tx.send(AppMessage::GetConnections(resp_tx)).await.unwrap();
+    tx.send(AppMessage::GetPlayers(resp_tx)).await.unwrap();
 
-    let connections = resp_rx.await.unwrap();
+    let players = resp_rx.await.unwrap();
 
-    Json(connections)
+    Json(players)
 }

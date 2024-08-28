@@ -1,4 +1,3 @@
-use crate::AppState;
 use bevy::prelude::*;
 use bevy_quinnet::{
     server::{
@@ -7,12 +6,22 @@ use bevy_quinnet::{
     },
     shared::channels::ChannelsConfiguration,
 };
-use engine::models::network::{ClientMessage, ServerMessage};
-use std::net::{IpAddr, Ipv4Addr};
+use engine::{
+    components::{
+        movement::Movement,
+        player::{Player, PlayerPosition},
+    },
+    models::network::{ClientMessage, ServerMessage},
+};
+use std::{
+    net::{IpAddr, Ipv4Addr},
+    time::Duration,
+};
 
 #[derive(Resource)]
 pub struct ServerConfig {
     port: u16,
+    broadcast_timer: Timer,
 }
 
 pub struct NetworkPlugin {
@@ -27,10 +36,14 @@ impl NetworkPlugin {
 
 impl Plugin for NetworkPlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(ServerConfig { port: self.port })
-            .add_plugins(QuinnetServerPlugin::default())
-            .add_systems(Startup, start_listening)
-            .add_systems(Update, handle_client_messages);
+        app.insert_resource(ServerConfig {
+            port: self.port,
+            broadcast_timer: Timer::new(Duration::from_millis(10), TimerMode::Repeating),
+        })
+        .add_plugins(QuinnetServerPlugin::default())
+        .add_systems(Startup, start_listening)
+        .add_systems(Update, handle_client_messages)
+        .add_systems(Update, broadcast_positions);
     }
 }
 
@@ -49,7 +62,11 @@ fn start_listening(server_config: Res<ServerConfig>, mut server: ResMut<QuinnetS
         .unwrap();
 }
 
-fn handle_client_messages(mut server: ResMut<QuinnetServer>, mut app_state: ResMut<AppState>) {
+fn handle_client_messages(
+    mut players: Query<(Entity, &Player, &mut PlayerPosition, &mut Movement)>,
+    mut commands: Commands,
+    mut server: ResMut<QuinnetServer>,
+) {
     let endpoint = server.endpoint_mut();
     for client_id in endpoint.clients() {
         while let Some((_channel_id, message)) =
@@ -57,39 +74,97 @@ fn handle_client_messages(mut server: ResMut<QuinnetServer>, mut app_state: ResM
         {
             match message {
                 ClientMessage::Join { user_id } => {
-                    app_state.connections.insert(client_id, user_id);
+                    commands.spawn((
+                        Player { client_id, user_id },
+                        PlayerPosition::default(),
+                        Movement::default(),
+                    ));
 
                     endpoint
                         .broadcast_message(ServerMessage::ClientConnected { client_id, user_id })
                         .unwrap();
 
-                    for (user_client_id, user_id) in app_state.connections.iter() {
+                    for (_, player, _, _) in players.into_iter() {
                         endpoint
                             .send_message(
                                 client_id,
                                 ServerMessage::ClientConnected {
-                                    client_id: *user_client_id,
-                                    user_id: *user_id,
+                                    client_id: player.client_id,
+                                    user_id: player.user_id,
                                 },
                             )
                             .unwrap();
                     }
                 }
                 ClientMessage::Disconnect {} => {
-                    app_state.connections.remove(&client_id);
+                    if let Some((entity, _, _, _)) = players
+                        .iter()
+                        .find(|(_, player, _, _)| player.client_id == client_id)
+                    {
+                        commands.entity(entity).despawn();
+                        endpoint
+                            .broadcast_message(ServerMessage::ClientDisconnected { client_id })
+                            .unwrap();
 
-                    endpoint
-                        .broadcast_message(ServerMessage::ClientDisconnected { client_id })
-                        .unwrap();
-
-                    endpoint.disconnect_client(client_id).unwrap();
+                        endpoint.disconnect_client(client_id).unwrap();
+                    }
                 }
                 ClientMessage::ChatMessage { message } => {
                     endpoint
                         .broadcast_message(ServerMessage::ChatMessage { client_id, message })
                         .unwrap();
                 }
+                ClientMessage::UpdatePosition { position } => {
+                    if let Some((_, _, mut player_position, _)) = players
+                        .iter_mut()
+                        .find(|(_, player, _, _)| player.client_id == client_id)
+                    {
+                        player_position.0 = position;
+
+                        endpoint
+                            .broadcast_message(ServerMessage::UpdatePosition {
+                                client_id,
+                                position,
+                            })
+                            .unwrap();
+                    }
+                }
+                ClientMessage::SendModifier(modifier) => {
+                    if let Some((_, _, _, mut movement)) = players
+                        .iter_mut()
+                        .find(|(_, player, _, _)| player.client_id == client_id)
+                    {
+                        movement.modify(modifier.clone());
+
+                        endpoint
+                            .broadcast_message(ServerMessage::SendModifier {
+                                client_id,
+                                modifier,
+                            })
+                            .unwrap();
+                    }
+                }
             }
+        }
+    }
+}
+
+fn broadcast_positions(
+    players: Query<(&Player, &PlayerPosition)>,
+    mut server: ResMut<QuinnetServer>,
+    time: Res<Time>,
+    mut config: ResMut<ServerConfig>,
+) {
+    config.broadcast_timer.tick(time.delta());
+    if config.broadcast_timer.finished() {
+        let endpoint = server.endpoint_mut();
+        for (player, position) in players.iter() {
+            endpoint
+                .broadcast_message(ServerMessage::UpdatePosition {
+                    client_id: player.client_id,
+                    position: position.0,
+                })
+                .unwrap()
         }
     }
 }

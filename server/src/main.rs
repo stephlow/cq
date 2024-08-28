@@ -1,14 +1,15 @@
 use anyhow::Result;
 use bevy::{app::ScheduleRunnerPlugin, log::tracing_subscriber, prelude::*};
-use bevy_quinnet::shared::ClientId;
 use clap::{arg, Parser};
 use engine::{
     api_client::{ping_server, register_server},
+    components::player::{Player, PlayerPosition},
     models::api::servers::Server,
+    plugins::movement::MovementPlugin,
 };
 use futures::future::join_all;
 use plugins::network::NetworkPlugin;
-use std::{collections::HashMap, net::IpAddr, time::Duration};
+use std::{net::IpAddr, time::Duration};
 use time::OffsetDateTime;
 use tokio::{
     sync::{mpsc, oneshot},
@@ -45,13 +46,12 @@ struct ServerArgs {
 enum AppMessage {
     SetServer(Server),
     GetServer(oneshot::Sender<Option<Server>>),
-    GetConnections(oneshot::Sender<HashMap<ClientId, Uuid>>),
+    GetPlayers(oneshot::Sender<Vec<(Uuid, Vec3)>>),
 }
 
 #[derive(Resource)]
 struct AppState {
     server: Option<Server>,
-    connections: HashMap<ClientId, Uuid>,
     tx: mpsc::Sender<AppMessage>,
     rx: mpsc::Receiver<AppMessage>,
 }
@@ -60,7 +60,6 @@ impl AppState {
     fn new(tx: mpsc::Sender<AppMessage>, rx: mpsc::Receiver<AppMessage>) -> Self {
         Self {
             server: None,
-            connections: HashMap::new(),
             tx,
             rx,
         }
@@ -89,6 +88,7 @@ async fn main() -> Result<()> {
             )))
             .insert_resource(AppState::new(bevy_tx, rx))
             .add_plugins(NetworkPlugin::new(port))
+            .add_plugins(MovementPlugin)
             .add_systems(Update, app_message_system)
             .run();
     });
@@ -141,17 +141,22 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-fn app_message_system(mut state: ResMut<AppState>) {
+fn app_message_system(players: Query<(&Player, &PlayerPosition)>, mut state: ResMut<AppState>) {
     if let Ok(message) = state.rx.try_recv() {
         match message {
             AppMessage::SetServer(server) => {
                 state.server = Some(server);
             }
-            AppMessage::GetConnections(tx) => {
-                tx.send(state.connections.clone()).unwrap();
-            }
             AppMessage::GetServer(tx) => {
                 tx.send(state.server.clone()).unwrap();
+            }
+            AppMessage::GetPlayers(tx) => {
+                let ids = players
+                    .into_iter()
+                    .map(|(player, position)| (player.user_id, position.0))
+                    .collect();
+
+                tx.send(ids).unwrap();
             }
         }
     }
