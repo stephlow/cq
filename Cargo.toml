@@ -1,6 +1,13 @@
 [workspace]
 resolver = "2"
-members = ["api", "client", "engine", "server"]
+members = [
+  "api",
+  "client",
+  "engine",
+  "server",
+  "server-manager/frontend",
+  "server-manager/backend",
+]
 
 [workspace.dependencies]
 anyhow = "1.0.86"
