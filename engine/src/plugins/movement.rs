@@ -26,11 +26,11 @@ fn handle_movement(mut players: Query<(&mut PlayerPosition, &Movement), With<Pla
         }
 
         if movement.left {
-            player_position.0.z += SPEED;
+            player_position.0.z -= SPEED;
         }
 
         if movement.right {
-            player_position.0.z -= SPEED;
+            player_position.0.z += SPEED;
         }
     }
 }
