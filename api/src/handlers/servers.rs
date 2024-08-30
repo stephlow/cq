@@ -5,28 +5,19 @@ use axum::{
 use engine::models;
 use sqlx::{query_as, PgPool};
 use std::net::SocketAddr;
-use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
 
 #[axum::debug_handler]
 pub async fn list_servers(
     Extension(pool): Extension<PgPool>,
 ) -> Json<Vec<models::api::servers::Server>> {
-    let now = OffsetDateTime::now_utc();
-    let timeout = Duration::minutes(30);
-
     let servers: Vec<models::data::servers::Server> =
-        query_as("SELECT * FROM servers ORDER BY last_ping DESC;")
+        query_as("SELECT * FROM servers WHERE last_ping >= NOW() - INTERVAL '1 minute' ORDER BY last_ping DESC;")
             .fetch_all(&pool)
             .await
             .unwrap();
 
-    let servers = servers
-        .into_iter()
-        // TODO: Move to query / drop servers
-        .filter(|server| now - server.last_ping <= timeout)
-        .map(Into::into)
-        .collect();
+    let servers = servers.into_iter().map(Into::into).collect();
 
     Json(servers)
 }
