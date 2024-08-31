@@ -7,6 +7,7 @@ edition = "2021"
 anyhow = { workspace = true }
 axum = { workspace = true }
 bevy = { workspace = true }
+bevy_ecs = { workspace = true }
 bevy_quinnet = { workspace = true }
 clap = { workspace = true }
 engine = { path = "../engine" }
