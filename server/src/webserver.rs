@@ -1,5 +1,6 @@
-use crate::{data::api::PlayerResponse, AppMessage};
+use crate::AppMessage;
 use axum::{response::IntoResponse, routing::get, Extension, Json, Router};
+use models::server::api::PlayerResponse;
 use tokio::sync::mpsc;
 
 pub fn create_router(tx: mpsc::Sender<AppMessage>) -> Router {

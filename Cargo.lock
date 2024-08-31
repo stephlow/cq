@@ -536,6 +536,7 @@ name = "backend"
 version = "0.1.0"
 dependencies = [
  "engine",
+ "models",
  "reqwest",
  "serde",
  "serde_json",
@@ -2830,10 +2831,10 @@ version = "0.1.0"
 dependencies = [
  "console_error_panic_hook",
  "js-sys",
+ "models",
  "serde",
  "serde-wasm-bindgen 0.6.5",
  "serde_json",
- "server",
  "uuid",
  "wasm-bindgen",
  "wasm-bindgen-futures",
@@ -4819,6 +4820,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "models"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "uuid",
+]
+
+[[package]]
 name = "naga"
 version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6778,6 +6787,7 @@ dependencies = [
  "clap",
  "engine",
  "futures",
+ "models",
  "once_cell",
  "reqwest",
  "serde",

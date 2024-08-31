@@ -26,7 +26,6 @@ use tokio::{
 use uuid::Uuid;
 use webserver::create_router;
 
-mod data;
 mod plugins;
 mod webserver;
 

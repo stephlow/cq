@@ -4,9 +4,10 @@ members = [
   "api",
   "client",
   "engine",
+  "models",
   "server",
-  "server-manager/frontend",
   "server-manager/backend",
+  "server-manager/frontend",
 ]
 
 [workspace.dependencies]

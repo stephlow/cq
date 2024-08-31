@@ -1,5 +1,5 @@
-use crate::data::api::PlayerResponse;
 use anyhow::Result;
+use models::server::api::PlayerResponse;
 use once_cell::sync::Lazy;
 use reqwest::{Client, Method};
 use std::time::Duration;
@@ -15,7 +15,7 @@ pub async fn get_players() -> Result<PlayerResponse> {
     let api_base_url = "http://localhost:3001";
 
     let response = CLIENT
-        .request(Method::GET, format!("{api_base_url}/auth"))
+        .request(Method::GET, format!("{api_base_url}/players"))
         .send()
         .await?;
 
