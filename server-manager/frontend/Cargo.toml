@@ -8,10 +8,11 @@ edition = "2021"
 console_error_panic_hook = "0.1.7"
 js-sys = "0.3"
 serde = { workspace = true }
-serde_json = { workspace = true }
 serde-wasm-bindgen = "0.6"
+serde_json = { workspace = true }
+server = { path = "../../server" }
+uuid = { workspace = true }
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
 web-sys = "0.3"
 yew = { version = "0.21", features = ["csr"] }
-uuid = { workspace = true }

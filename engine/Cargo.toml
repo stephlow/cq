@@ -10,7 +10,7 @@ bcrypt = { workspace = true }
 bevy = { workspace = true }
 bevy_quinnet = { workspace = true }
 josekit = { workspace = true }
-once_cell = "1.19.0"
+once_cell = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true }
 sqlx = { workspace = true }

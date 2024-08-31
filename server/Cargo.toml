@@ -11,6 +11,8 @@ bevy_quinnet = { workspace = true }
 clap = { workspace = true }
 engine = { path = "../engine" }
 futures = "0.3.30"
+once_cell = { workspace = true }
+reqwest = { workspace = true }
 serde = { workspace = true }
 time = { workspace = true }
 tokio = { workspace = true }

@@ -14,6 +14,7 @@ engine = { path = "../../engine" }
 reqwest = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+server = { path = "../../server" }
 tauri = { version = "1", features = ["shell-open"] }
 uuid = { workspace = true }
 

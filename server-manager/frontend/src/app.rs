@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::to_value;
+use server::data::api::PlayerResponse;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 use yew::prelude::*;
@@ -13,7 +14,7 @@ extern "C" {
 #[derive(Serialize, Deserialize)]
 struct GetPlayersArgs;
 
-async fn get_players() -> Vec<String> {
+async fn get_players() -> PlayerResponse {
     let args = to_value(&GetPlayersArgs).unwrap();
     let response = invoke("get_players", args).await;
     serde_wasm_bindgen::from_value(response).unwrap()
@@ -21,13 +22,13 @@ async fn get_players() -> Vec<String> {
 
 #[function_component(App)]
 pub fn app() -> Html {
-    let players: UseStateHandle<Vec<String>> = use_state(|| Vec::new());
+    let players: UseStateHandle<Option<PlayerResponse>> = use_state(|| None);
     {
         let players = players.clone();
         use_effect_with((), move |_| {
             spawn_local(async move {
                 let value = get_players().await;
-                players.set(value);
+                players.set(Some(value));
             });
         });
     }
@@ -39,7 +40,7 @@ pub fn app() -> Html {
             e.prevent_default();
             spawn_local(async move {
                 let value = get_players().await;
-                players.set(value);
+                players.set(Some(value));
             });
         })
     };
@@ -83,19 +84,21 @@ pub fn app() -> Html {
     //     })
     // };
 
-    let player_list = players
-        .iter()
-        .enumerate()
-        .map(|(id, player)| {
-            html! {
-                <li key={id}>{format!("{}", player)}</li>
-            }
-        })
-        .collect::<Html>();
+    let player_list = match &*players {
+        Some(PlayerResponse { players }) => players
+            .iter()
+            .enumerate()
+            .map(|(id, player)| {
+                html! {
+                    <li key={id}>{format!("{}", player)}</li>
+                }
+            })
+            .collect::<Html>(),
+        None => html! { <p>{"No players connected"}</p>},
+    };
 
     html! {
         <main>
-            {players.len()}
             <ul>{player_list}</ul>
             <button type="submit" onclick={reload}>{"Reload"}</button>
         </main>

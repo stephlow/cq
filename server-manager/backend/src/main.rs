@@ -1,18 +1,13 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use uuid::Uuid;
+use server::data::api::PlayerResponse;
 
 #[tauri::command]
-async fn get_players() -> Result<Vec<Uuid>, ()> {
-    let body = reqwest::get("http://localhost:3001/players")
-        .await
-        .unwrap()
-        .json::<Vec<Uuid>>()
-        .await
-        .unwrap();
+async fn get_players() -> Result<PlayerResponse, ()> {
+    let response = server::api_client::get_players().await.unwrap();
 
-    Ok(body)
+    Ok(response)
 }
 
 fn main() {
