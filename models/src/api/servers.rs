@@ -3,7 +3,7 @@ use std::net::IpAddr;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(PartialEq, Debug, Clone, Deserialize, Serialize)]
 pub struct Server {
     pub id: Uuid,
     pub addr: IpAddr,

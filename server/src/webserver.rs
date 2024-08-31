@@ -5,7 +5,7 @@ use axum::{
     routing::{delete, get},
     Extension, Json, Router,
 };
-use models::server::api::PlayerResponse;
+use models::server::api::{PlayerResponse, ServerInfoResponse};
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
@@ -18,14 +18,16 @@ pub fn create_router(tx: mpsc::Sender<AppMessage>) -> Router {
 }
 
 #[axum::debug_handler]
-async fn get_server(Extension(tx): Extension<mpsc::Sender<AppMessage>>) -> impl IntoResponse {
+async fn get_server(
+    Extension(tx): Extension<mpsc::Sender<AppMessage>>,
+) -> Json<ServerInfoResponse> {
     let (resp_tx, resp_rx) = tokio::sync::oneshot::channel();
 
     tx.send(AppMessage::GetServer(resp_tx)).await.unwrap();
 
-    let connections = resp_rx.await.unwrap();
+    let server = resp_rx.await.unwrap();
 
-    Json(connections)
+    Json(ServerInfoResponse { server })
 }
 
 #[axum::debug_handler]
