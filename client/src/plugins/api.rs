@@ -111,7 +111,7 @@ impl<T> LoadableData<T> {
 
     fn finish(&mut self, data: T) {
         self.data = Some(data);
-        self.loading = true;
+        self.loading = false;
     }
 
     fn failed(&mut self) {
