@@ -153,6 +153,7 @@ fn server_ui_system(
 
 fn server_browser_ui_system(
     api: Res<ApiResource>,
+    mut api_event_writer: EventWriter<ApiEvent>,
     mut contexts: EguiContexts,
     mut client_event_writer: EventWriter<ClientEvent>,
 ) {
@@ -171,6 +172,15 @@ fn server_browser_ui_system(
             }
         } else {
             ui.label("No servers");
+        }
+
+        let bttn_text = match api.servers.loading {
+            true => "Loading...",
+            false => "Reload",
+        };
+
+        if ui.button(bttn_text).clicked && !api.servers.loading {
+            api_event_writer.send(ApiEvent::LoadServers);
         }
     });
 }
