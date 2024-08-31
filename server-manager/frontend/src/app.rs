@@ -1,6 +1,7 @@
 use models::server::api::PlayerResponse;
 use serde::{Deserialize, Serialize};
 use serde_wasm_bindgen::to_value;
+use uuid::Uuid;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 use yew::prelude::*;
@@ -14,116 +15,86 @@ extern "C" {
 #[derive(Serialize, Deserialize)]
 struct GetPlayersArgs;
 
-async fn get_players() -> PlayerResponse {
+#[derive(Serialize, Deserialize)]
+struct KickPlayerArgs {
+    id: Uuid,
+}
+
+async fn invoke_get_players() -> PlayerResponse {
     let args = to_value(&GetPlayersArgs).unwrap();
     let response = invoke("get_players", args).await;
     serde_wasm_bindgen::from_value(response).unwrap()
 }
 
+async fn invoke_kick_player(id: Uuid) {
+    let args = to_value(&KickPlayerArgs { id }).unwrap();
+    invoke("kick_player", args).await;
+}
+
 #[function_component(App)]
 pub fn app() -> Html {
     let players: UseStateHandle<Option<PlayerResponse>> = use_state(|| None);
-    {
+
+    let load_players = use_callback(players.clone(), move |_, players| {
         let players = players.clone();
-        use_effect_with((), move |_| {
-            spawn_local(async move {
-                let value = get_players().await;
-                players.set(Some(value));
-            });
+        spawn_local(async move {
+            let value = invoke_get_players().await;
+            players.set(Some(value));
         });
-    }
+    });
 
-    let reload = {
+    use_effect_with(load_players.clone(), move |load_players| {
+        load_players.emit(());
+    });
+
+    let reload = use_callback(
+        load_players.clone(),
+        move |event: MouseEvent, load_players| {
+            event.prevent_default();
+            load_players.emit(());
+        },
+    );
+
+    let kick = use_callback(load_players.clone(), move |id: Uuid, load_players| {
+        let load_players = load_players.clone();
+        spawn_local(async move {
+            invoke_kick_player(id).await;
+            load_players.emit(());
+        });
+    });
+
+    let player_list = use_memo(players.clone(), |players| {
         let players = players.clone();
-        Callback::from(move |e: MouseEvent| {
-            let players = players.clone();
-            e.prevent_default();
-            spawn_local(async move {
-                let value = get_players().await;
-                players.set(Some(value));
-            });
-        })
-    };
+        match players.as_ref() {
+            Some(response) => {
+                let players = response.players.clone();
 
-    // let greet_input_ref = use_node_ref();
-    //
-    // let name = use_state(|| String::new());
-    //
-    // let greet_msg = use_state(|| String::new());
-    // {
-    //     let greet_msg = greet_msg.clone();
-    //     let name = name.clone();
-    //     let name2 = name.clone();
-    //     use_effect_with(name2, move |_| {
-    //         spawn_local(async move {
-    //             if name.is_empty() {
-    //                 return;
-    //             }
-    //
-    //             let args = to_value(&GreetArgs { name: &*name }).unwrap();
-    //             // Learn more about Tauri commands at https://tauri.app/v1/guides/features/command
-    //             let new_msg = invoke("greet", args).await.as_string().unwrap();
-    //             greet_msg.set(new_msg);
-    //         });
-    //
-    //         || {}
-    //     });
-    // }
-    //
-    // let greet = {
-    //     let name = name.clone();
-    //     let greet_input_ref = greet_input_ref.clone();
-    //     Callback::from(move |e: SubmitEvent| {
-    //         e.prevent_default();
-    //         name.set(
-    //             greet_input_ref
-    //                 .cast::<web_sys::HtmlInputElement>()
-    //                 .unwrap()
-    //                 .value(),
-    //         );
-    //     })
-    // };
+                players
+                    .into_iter()
+                    .enumerate()
+                    .map(|(index, player)| {
+                        let kick = kick.clone();
+                        let onclick = Callback::from(move |_| {
+                            kick.emit(player);
+                        });
 
-    let player_list = match &*players {
-        Some(PlayerResponse { players }) => players
-            .iter()
-            .enumerate()
-            .map(|(id, player)| {
-                html! {
-                    <li key={id}>{format!("{}", player)}</li>
-                }
-            })
-            .collect::<Html>(),
-        None => html! { <p>{"No players connected"}</p>},
-    };
+                        html! {
+                            <li key={index}>
+                                {player.to_string()}
+                                <button onclick={onclick}>{"Kick"}</button>
+                            </li>
+                        }
+                    })
+                    .collect::<Html>()
+            }
+            None => html! { <p>{"No players"}</p> },
+        }
+    });
 
     html! {
         <main>
-            <ul>{player_list}</ul>
+            <ul>{(*player_list).clone()}</ul>
             <button type="submit" onclick={reload}>{"Reload"}</button>
         </main>
     }
-
-    // html! {
-    //     <main class="container">
-    //         {players.len()}
-    //         <div style="background: red">{pls}</div>
-    //         <div class="row">
-    //             <a href="https://tauri.app" target="_blank">
-    //                 <img src="public/tauri.svg" class="logo tauri" alt="Tauri logo"/>
-    //             </a>
-    //             <a href="https://yew.rs" target="_blank">
-    //                 <img src="public/yew.png" class="logo yew" alt="Yew logo"/>
-    //             </a>
-    //         </div>
-
-    //         <p>{"Click on the Tauri and Yew logos to learn more."}</p>
-    //         <form class="row" onsubmit={greet}>
-    //             <input id="greet-input" ref={greet_input_ref} placeholder="Enter a name..." />
-    //             <button type="submit">{"Greet"}</button>
-    //         </form>
-
-    //         <p><b>{ &*greet_msg }</b></p>
-    //     </main>
-    // }
 }

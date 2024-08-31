@@ -1,12 +1,19 @@
 use crate::AppMessage;
-use axum::{response::IntoResponse, routing::get, Extension, Json, Router};
+use axum::{
+    extract::Path,
+    response::IntoResponse,
+    routing::{delete, get},
+    Extension, Json, Router,
+};
 use models::server::api::PlayerResponse;
 use tokio::sync::mpsc;
+use uuid::Uuid;
 
 pub fn create_router(tx: mpsc::Sender<AppMessage>) -> Router {
     Router::new()
         .route("/", get(get_server))
         .route("/players", get(get_players))
+        .route("/players/:id", delete(kick_player))
         .layer(Extension(tx))
 }
 
@@ -34,4 +41,14 @@ async fn get_players(Extension(tx): Extension<mpsc::Sender<AppMessage>>) -> Json
     };
 
     Json(players)
+}
+
+#[axum::debug_handler]
+async fn kick_player(
+    Path(id): Path<Uuid>,
+    Extension(tx): Extension<mpsc::Sender<AppMessage>>,
+) -> impl IntoResponse {
+    tx.send(AppMessage::KickPlayer(id)).await.unwrap();
+
+    "Ok"
 }

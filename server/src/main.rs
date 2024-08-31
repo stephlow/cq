@@ -8,7 +8,9 @@ use bevy::{
     math::Vec3,
 };
 use bevy_ecs::prelude::*;
+use bevy_quinnet::server::QuinnetServer;
 use clap::{arg, Parser};
+use engine::models::network::ServerMessage;
 use engine::{
     api_client::{ping_server, register_server},
     components::player::{Player, PlayerPosition},
@@ -52,9 +54,10 @@ struct ServerArgs {
 }
 
 enum AppMessage {
-    SetServer(Server),
-    GetServer(oneshot::Sender<Option<Server>>),
     GetPlayers(oneshot::Sender<Vec<(Uuid, Vec3)>>),
+    GetServer(oneshot::Sender<Option<Server>>),
+    KickPlayer(Uuid),
+    SetServer(Server),
 }
 
 #[derive(Resource)]
@@ -149,7 +152,12 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-fn app_message_system(players: Query<(&Player, &PlayerPosition)>, mut state: ResMut<AppState>) {
+fn app_message_system(
+    mut commands: Commands,
+    players: Query<(Entity, &Player, &PlayerPosition)>,
+    mut state: ResMut<AppState>,
+    mut server: ResMut<QuinnetServer>,
+) {
     if let Ok(message) = state.rx.try_recv() {
         match message {
             AppMessage::SetServer(server) => {
@@ -161,10 +169,23 @@ fn app_message_system(players: Query<(&Player, &PlayerPosition)>, mut state: Res
             AppMessage::GetPlayers(tx) => {
                 let ids = players
                     .into_iter()
-                    .map(|(player, position)| (player.user_id, position.0))
+                    .map(|(_, player, position)| (player.user_id, position.0))
                     .collect();
 
                 tx.send(ids).unwrap();
+            }
+            AppMessage::KickPlayer(id) => {
+                if let Some((entity, player, _)) =
+                    players.iter().find(|(_, player, _)| player.user_id == id)
+                {
+                    commands.entity(entity).despawn();
+                    let endpoint = server.endpoint_mut();
+                    endpoint
+                        .broadcast_message(ServerMessage::ClientDisconnected {
+                            client_id: player.client_id,
+                        })
+                        .unwrap();
+                }
             }
         }
     }
