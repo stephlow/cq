@@ -1,12 +1,10 @@
 use crate::AuthState;
 use bevy::prelude::*;
-use engine::{
-    api_client::{authenticate, get_profile, get_user, list_servers, register_user},
-    models::api::{
-        auth::{AuthResponse, Credentials},
-        servers::Server,
-        users::{NewUser, User},
-    },
+use engine::api_client::{authenticate, get_profile, get_user, list_servers, register_user};
+use models::api::{
+    auth::{AuthResponse, Credentials},
+    servers::Server,
+    users::{NewUser, User},
 };
 use std::collections::HashMap;
 use tokio::{runtime::Runtime, sync::mpsc};

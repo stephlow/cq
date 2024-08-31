@@ -1,4 +1,3 @@
-use crate::models;
 use serde::{Deserialize, Serialize};
 use std::net::IpAddr;
 use time::OffsetDateTime;
@@ -30,8 +29,8 @@ impl Server {
     }
 }
 
-impl From<models::data::servers::Server> for Server {
-    fn from(value: models::data::servers::Server) -> Self {
+impl From<crate::data::servers::Server> for Server {
+    fn from(value: crate::data::servers::Server) -> Self {
         let port: u16 = value.port.try_into().expect("Invalid port");
 
         Self {

@@ -1,4 +1,3 @@
-use crate::models;
 use josekit::{
     jws::JwsHeader,
     jwt::{self, JwtPayload},
@@ -17,7 +16,7 @@ pub struct AuthResponse {
 }
 
 impl AuthResponse {
-    pub fn from_user(value: models::data::users::User) -> Self {
+    pub fn from_user(value: crate::data::users::User) -> Self {
         let mut header = JwsHeader::new();
         header.set_token_type("JWT");
 

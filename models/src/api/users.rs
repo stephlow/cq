@@ -1,4 +1,3 @@
-use crate::models;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -8,8 +7,8 @@ pub struct User {
     pub username: String,
 }
 
-impl From<models::data::users::User> for User {
-    fn from(value: models::data::users::User) -> Self {
+impl From<crate::data::users::User> for User {
+    fn from(value: crate::data::users::User) -> Self {
         Self {
             id: value.id,
             username: value.username,

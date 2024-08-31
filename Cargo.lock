@@ -277,8 +277,8 @@ dependencies = [
  "axum",
  "clap",
  "dotenvy",
- "engine",
  "josekit",
+ "models",
  "serde",
  "serde_json",
  "sqlx",
@@ -1881,6 +1881,7 @@ dependencies = [
  "bevy_quinnet",
  "clap",
  "engine",
+ "models",
  "tokio",
  "uuid",
 ]
@@ -2586,6 +2587,7 @@ dependencies = [
  "bevy_ecs",
  "bevy_quinnet",
  "josekit",
+ "models",
  "once_cell",
  "reqwest",
  "serde",
@@ -4823,7 +4825,11 @@ dependencies = [
 name = "models"
 version = "0.1.0"
 dependencies = [
+ "bcrypt",
+ "josekit",
  "serde",
+ "sqlx",
+ "time",
  "uuid",
 ]
 

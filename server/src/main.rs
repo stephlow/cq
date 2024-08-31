@@ -14,10 +14,10 @@ use engine::models::network::ServerMessage;
 use engine::{
     api_client::{ping_server, register_server},
     components::player::{Player, PlayerPosition},
-    models::api::servers::Server,
     plugins::movement::MovementPlugin,
 };
 use futures::future::join_all;
+use models::api::servers::Server;
 use plugins::network::NetworkPlugin;
 use std::{net::IpAddr, time::Duration};
 use time::OffsetDateTime;
@@ -113,7 +113,7 @@ async fn main() -> Result<()> {
     let api_handle = tokio::spawn(async move {
         let server = register_server(
             &api_base_url,
-            &engine::models::api::servers::RegisterServer { addr, port, name },
+            &models::api::servers::RegisterServer { addr, port, name },
         )
         .await
         .unwrap();

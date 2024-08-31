@@ -10,9 +10,9 @@ bevy = { workspace = true }
 bevy_ecs = { workspace = true }
 bevy_quinnet = { workspace = true }
 clap = { workspace = true }
-engine = { path = "../engine" }
+engine = { workspace = true }
 futures = "0.3.30"
-models = { path = "../models" }
+models = { workspace = true }
 once_cell = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true }

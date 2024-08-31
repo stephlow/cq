@@ -8,6 +8,7 @@ bevy = { workspace = true, features = ["default"] }
 bevy_egui = "0.29.0"
 bevy_quinnet = { workspace = true }
 clap = { workspace = true }
-engine = { path = "../engine" }
+engine = { workspace = true }
+models = { workspace = true }
 tokio = { workspace = true }
 uuid = { workspace = true }

@@ -1,6 +1,5 @@
 use anyhow::Result;
 use axum::{http::HeaderMap, Extension, Json};
-use engine::models;
 use josekit::jwt::{self};
 use sqlx::{query_as, PgPool};
 use std::str::FromStr;

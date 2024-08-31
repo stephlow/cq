@@ -11,6 +11,7 @@ bevy = { workspace = true }
 bevy_ecs = { workspace = true }
 bevy_quinnet = { workspace = true }
 josekit = { workspace = true }
+models = { workspace = true }
 once_cell = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true }

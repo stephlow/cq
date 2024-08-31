@@ -1,9 +1,9 @@
-use crate::models::api::{
+use anyhow::Result;
+use models::api::{
     auth::{AuthResponse, Credentials},
     servers::{RegisterServer, Server},
     users::{NewUser, User},
 };
-use anyhow::Result;
 use once_cell::sync::Lazy;
 use reqwest::{Client, Method};
 use std::time::Duration;

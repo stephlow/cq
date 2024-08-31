@@ -1,5 +1,4 @@
 use axum::{extract::Path, Extension, Json};
-use engine::models::{self};
 use sqlx::{query_as, PgPool};
 use uuid::Uuid;
 

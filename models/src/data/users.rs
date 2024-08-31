@@ -1,4 +1,3 @@
-use crate::models;
 use bcrypt::{hash, verify, DEFAULT_COST};
 use sqlx::prelude::FromRow;
 use uuid::Uuid;
@@ -23,8 +22,8 @@ pub struct NewUser {
     pub password_hash: String,
 }
 
-impl From<models::api::users::NewUser> for NewUser {
-    fn from(value: models::api::users::NewUser) -> Self {
+impl From<crate::api::users::NewUser> for NewUser {
+    fn from(value: crate::api::users::NewUser) -> Self {
         let password_hash = hash(&value.password, DEFAULT_COST).unwrap();
 
         Self {
