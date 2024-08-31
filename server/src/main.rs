@@ -1,5 +1,13 @@
 use anyhow::Result;
-use bevy::{app::ScheduleRunnerPlugin, log::tracing_subscriber, prelude::*};
+use bevy::app::App;
+use bevy::prelude::PluginGroup;
+use bevy::MinimalPlugins;
+use bevy::{
+    app::{ScheduleRunnerPlugin, Update},
+    log::tracing_subscriber,
+    math::Vec3,
+};
+use bevy_ecs::prelude::*;
 use clap::{arg, Parser};
 use engine::{
     api_client::{ping_server, register_server},

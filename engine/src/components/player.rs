@@ -1,4 +1,5 @@
-use bevy::prelude::*;
+use bevy::ecs::component::Component;
+use bevy::math::Vec3;
 use bevy_quinnet::shared::ClientId;
 use uuid::Uuid;
 

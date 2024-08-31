@@ -1,4 +1,4 @@
-use bevy::prelude::*;
+use bevy::ecs::component::Component;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize, Serialize, Clone)]

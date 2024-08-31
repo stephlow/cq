@@ -1,9 +1,9 @@
-use bevy::prelude::*;
-
 use crate::components::{
     movement::Movement,
     player::{Player, PlayerPosition},
 };
+use bevy::app::{App, Plugin, Update};
+use bevy_ecs::prelude::*;
 
 pub struct MovementPlugin;
 
