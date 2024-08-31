@@ -13,7 +13,6 @@ clap = { workspace = true }
 engine = { workspace = true }
 futures = "0.3.30"
 models = { workspace = true }
-once_cell = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true }
 time = { workspace = true }

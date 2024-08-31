@@ -537,6 +537,7 @@ version = "0.1.0"
 dependencies = [
  "engine",
  "models",
+ "once_cell",
  "reqwest",
  "serde",
  "serde_json",
@@ -6794,7 +6795,6 @@ dependencies = [
  "engine",
  "futures",
  "models",
- "once_cell",
  "reqwest",
  "serde",
  "time",
