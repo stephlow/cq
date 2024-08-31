@@ -535,10 +535,13 @@ dependencies = [
 name = "backend"
 version = "0.1.0"
 dependencies = [
+ "engine",
+ "reqwest",
  "serde",
  "serde_json",
  "tauri",
  "tauri-build",
+ "uuid",
 ]
 
 [[package]]
@@ -2827,6 +2830,8 @@ dependencies = [
  "js-sys",
  "serde",
  "serde-wasm-bindgen 0.6.5",
+ "serde_json",
+ "uuid",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",

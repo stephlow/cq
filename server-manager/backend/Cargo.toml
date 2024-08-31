@@ -10,9 +10,12 @@ edition = "2021"
 tauri-build = { version = "1", features = [] }
 
 [dependencies]
+engine = { path = "../../engine" }
+reqwest = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tauri = { version = "1", features = ["shell-open"] }
+uuid = { workspace = true }
 
 [features]
 # This feature is used for production builds or when a dev server is not specified, DO NOT REMOVE!!

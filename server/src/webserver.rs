@@ -1,6 +1,7 @@
 use crate::AppMessage;
 use axum::{response::IntoResponse, routing::get, Extension, Json, Router};
 use tokio::sync::mpsc;
+use uuid::Uuid;
 
 pub fn create_router(tx: mpsc::Sender<AppMessage>) -> Router {
     Router::new()
@@ -27,6 +28,7 @@ async fn get_players(Extension(tx): Extension<mpsc::Sender<AppMessage>>) -> impl
     tx.send(AppMessage::GetPlayers(resp_tx)).await.unwrap();
 
     let players = resp_rx.await.unwrap();
+    let players: Vec<Uuid> = players.into_iter().map(|(id, _)| id).collect();
 
     Json(players)
 }

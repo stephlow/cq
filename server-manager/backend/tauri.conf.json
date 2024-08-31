@@ -7,7 +7,7 @@
     "withGlobalTauri": true
   },
   "package": {
-    "productName": "manager",
+    "productName": "Server Manager",
     "version": "0.1.0"
   },
   "tauri": {
@@ -20,7 +20,8 @@
     },
     "windows": [
       {
-        "title": "manager",
+        "focus": false,
+        "title": "Server Manager",
         "width": 800,
         "height": 600
       }
