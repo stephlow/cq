@@ -6,6 +6,10 @@ use engine::components::{
 };
 use uuid::Uuid;
 
+use crate::components::controllable::Controllable;
+
+use super::api::ApiResource;
+
 pub struct RenderPlugin;
 
 impl Plugin for RenderPlugin {
@@ -13,9 +17,13 @@ impl Plugin for RenderPlugin {
         app.add_event::<RenderEvent>()
             .add_systems(Startup, setup)
             .add_systems(Update, handle_render_event)
-            .add_systems(Update, update_position);
+            .add_systems(Update, update_position)
+            .add_systems(Update, update_camera);
     }
 }
+
+#[derive(Component)]
+struct CameraMarker;
 
 #[derive(Event)]
 pub enum RenderEvent {
@@ -57,13 +65,17 @@ fn setup(
     });
 
     // Camera
-    commands.spawn(Camera3dBundle {
-        transform: Transform::from_xyz(10., 15., 10.).looking_at(Vec3::ZERO, Vec3::Y),
-        ..default()
-    });
+    commands.spawn((
+        Camera3dBundle {
+            transform: Transform::from_xyz(10., 15., 10.).looking_at(Vec3::ZERO, Vec3::Y),
+            ..default()
+        },
+        CameraMarker,
+    ));
 }
 
 fn handle_render_event(
+    api: Res<ApiResource>,
     mut players: Query<(Entity, &Player, &mut PlayerPosition, &mut Movement)>,
     mut events: EventReader<RenderEvent>,
     mut commands: Commands,
@@ -73,7 +85,7 @@ fn handle_render_event(
     for event in events.read() {
         match event {
             RenderEvent::Spawn { client_id, user_id } => {
-                commands.spawn((
+                let mut entity = commands.spawn((
                     Player {
                         client_id: *client_id,
                         user_id: *user_id,
@@ -87,6 +99,12 @@ fn handle_render_event(
                         ..default()
                     },
                 ));
+
+                if let Some(user) = &api.profile.data {
+                    if &user.id == user_id {
+                        entity.insert(Controllable);
+                    }
+                }
             }
             RenderEvent::Despawn(client_id) => {
                 if let Some((entity, _, _, _)) = players
@@ -129,5 +147,22 @@ fn update_position(mut players: Query<(&mut Transform, &PlayerPosition)>) {
         transform.translation.x = player_position.0.x;
         transform.translation.y = player_position.0.y;
         transform.translation.z = player_position.0.z;
+    }
+}
+
+fn update_camera(
+    controllable: Query<(&Controllable, &PlayerPosition)>,
+    mut camera: Query<(&mut Transform, &CameraMarker)>,
+) {
+    let camera_offset = Vec3::new(-10.0, 10.0, 0.0);
+
+    for (_, position) in controllable.iter() {
+        let player_pos = position.0;
+
+        for (mut transform, _) in camera.iter_mut() {
+            transform.translation = player_pos + camera_offset;
+
+            transform.look_at(player_pos, Vec3::Y);
+        }
     }
 }

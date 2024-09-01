@@ -11,6 +11,7 @@ use plugins::{
 };
 use uuid::Uuid;
 
+mod components;
 mod plugins;
 
 #[derive(Parser, Debug)]
